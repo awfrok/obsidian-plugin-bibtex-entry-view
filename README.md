@@ -21,7 +21,7 @@
 ### in the settings 
 
 - put the `.bib` file in the root of the vault. And, in the settings of the plugin, you can choose the `.bib` file.
-- Or, make a symbolic link to the `.bib` file in the root of the vault, then you can choose it in the settings of the plugin.
+- Or, make a symbolic link to the `.bib` file in the root of the vault. And, you can choose it in the settings of the plugin.
 
 ## license
 
