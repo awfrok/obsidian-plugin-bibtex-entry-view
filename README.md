@@ -4,7 +4,7 @@
 
 ![sample.png](sample.png)
 
-- If the plugin find the `bibtexkey` in the `.bib` file, the codeblock (first one) is replaced with the entry view of the `bibtexkey` (secondcode block).
+- If the plugin find the `bibtexkey` in the `.bib` file, the codeblock (first codeblock above) is replaced with the entry view of the `bibtexkey` (second codeblock).
 - If the plugin cannot find the `bibtexkey` in the `.bib` file, the codeblock remains same with red colored text and canceled line (third codeblock).
 
 ## how to use
