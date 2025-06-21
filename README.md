@@ -7,7 +7,7 @@
 - If the plugin find the `bibtexkey` in the `.bib` file, the codeblock (first codeblock above) is replaced with the entry view of the `bibtexkey` (second codeblock).
 - If the plugin cannot find the `bibtexkey` in the `.bib` file, the codeblock remains same with red colored text and canceled line (third codeblock).
 
-## how to use
+## how to use it
 
 ### in the note
 
@@ -25,8 +25,8 @@
 
 ## what to do next
 
-- Option for Sorting the fields in the order of what a user chooses in the plugin settings.
-- Option for hiding the field that a user chooses in the plugin settings.
+- Adding the option for Sorting the fields in the order of what a user chooses in the plugin settings.
+- Adding the option for hiding the field that a user chooses in the plugin settings.
 
 ## license
 
