@@ -1,4 +1,4 @@
-# Obsidian plugin bibtex entry view
+# Obsidian.md plugin bibtex entry view
 
 ## what is it
 
@@ -20,8 +20,13 @@
 
 ### in the settings 
 
-- put the `.bib` file in the root of the vault. And, in the settings of the plugin, you can choose the `.bib` file.
+- Put the `.bib` file in the root of the vault. And, in the settings of the plugin, you can choose the `.bib` file.
 - Or, make a symbolic link to the `.bib` file in the root of the vault. And, you can choose it in the settings of the plugin.
+
+## what to do next
+
+- Option for Sorting the fields in the order of what a user chooses in the plugin settings.
+- Option for hiding the field that a user chooses in the plugin settings.
 
 ## license
 

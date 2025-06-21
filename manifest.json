@@ -4,7 +4,7 @@
 	"version": "0.1.0",
 	"minAppVersion": "0.15.0",
 	"description": "Load the bibtex entry of a given citationkey (bibtexkey) from a given .bib file and show the entry in the code block of 'bibtexkey'.",
-	"author": "Awfrok",
+	"author": "Kyoungdeuk",
 	"authorUrl": "https://github.com/awfrok/obsidian-plugin-bibtex-entry-view",
 	"fundingUrl": "",
 	"isDesktopOnly": false

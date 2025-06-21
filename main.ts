@@ -79,8 +79,8 @@ export default class BibtexEntryViewPlugin extends Plugin {
                         
                         // Build the styled entry programmatically.
                         entryCode.createEl('span', { text: parsedEntry.bibtexKey, cls: 'bibtex-key' });
-                        entryCode.createEl('span', { text: '\nentry type: ', cls: 'bibtex-field-name'})
-                        entryCode.createEl('span', { text: parsedEntry.entryType, cls: 'bibtex-entrytype' })
+                        //entryCode.createEl('span', { text: '\nentry type: ', cls: 'bibtex-field-name'})
+                        //entryCode.createEl('span', { text: parsedEntry.entryType, cls: 'bibtex-entrytype' })
                         
                         parsedEntry.fields.forEach((field) => {
                             entryCode.appendText('\n');
@@ -232,7 +232,7 @@ export default class BibtexEntryViewPlugin extends Plugin {
             }
             
             // --- UPDATED: Add 'entrytype' to the map to be sorted and rendered like other fields ---
-            // fields.set('entrytype', `entrytype = {${entryType}}`);
+            fields.set('entrytype', `entrytype = {${entryType}}`);
             
             // Step 3: Remove fields we never want to show.
             const fieldsToRemove = ['abstract', 'creationdate', 'modificationdate', 'citationkey', 'language', 'keywords'];
@@ -243,7 +243,7 @@ export default class BibtexEntryViewPlugin extends Plugin {
             
             // This array defines the exact order we want the fields to appear in.
             const priorityOrder = [
-                'author', 'editor', 'year', 'title', 'subtitle', 
+                'author', 'editor', 'year', 'entrytype', 'title', 'subtitle', 
                 'booktitle', 'booksubtitle', 'edition', 'journal', 'series', 'volume', 
                 'number', 'pages', 'address', 'publisher'
             ];
