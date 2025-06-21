@@ -1,4 +1,4 @@
-import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, TextComponent, MarkdownPostProcessorContext } from 'obsidian';
+import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, TextComponent } from 'obsidian';
 
 // 1. SETTINGS INTERFACE: Defines the shape of our plugin's data
 // This interface ensures that any settings object we use has a 'bibFilePath' property of type string.
@@ -79,8 +79,6 @@ export default class BibtexEntryViewPlugin extends Plugin {
                         
                         // Build the styled entry programmatically.
                         entryCode.createEl('span', { text: parsedEntry.bibtexKey, cls: 'bibtex-key' });
-                        //entryCode.createEl('span', { text: '\nentry type: ', cls: 'bibtex-field-name'})
-                        //entryCode.createEl('span', { text: parsedEntry.entryType, cls: 'bibtex-entrytype' })
                         
                         parsedEntry.fields.forEach((field) => {
                             entryCode.appendText('\n');

@@ -11,7 +11,7 @@
 
 ### in the note
 
-- Use codeblock format as following.
+- Write a codeblock in the following format
 ````
 ```bibtexkey
 {bibtexkey}
