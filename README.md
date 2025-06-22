@@ -1,4 +1,4 @@
-# Obsidian.md plugin bibtex entry view
+# bibtex entry view, a plugin for obsidian
 
 ## what is it
 
