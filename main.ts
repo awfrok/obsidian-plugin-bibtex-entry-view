@@ -1,8 +1,8 @@
-import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, TextComponent } from 'obsidian';
+import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, TextComponent, MarkdownPostProcessorContext } from 'obsidian';
 
 // 1. SETTINGS INTERFACE: Defines the shape of our plugin's data
-// This interface ensures that any settings object we use has a 'bibFilePath' property of type string.
-// It helps prevent errors by providing type-checking for our settings.
+// This interface ensures that any settings object we use has the correct properties and types.
+// It helps prevent errors by enabling TypeScript's static type-checking.
 interface BibtexEntryViewSettings {
     bibFilePath: string;
     autoRender: boolean; // --- NEW: Setting for the toggle ---
@@ -17,14 +17,16 @@ const DEFAULT_SETTINGS: BibtexEntryViewSettings = {
 }
 
 // --- UPDATED: Interface for parsed BibTeX data to be rendered ---
+// This defines the structure for a single field after it has been parsed.
 interface ParsedBibtexField {
     fieldName: string;
     fieldValue: string; // Stores the raw value without brackets
 }
 
+// This defines the structure for a fully parsed and ready-to-render BibTeX entry.
 interface FormattedBibtexEntry {
     entryType: string;
-    bibtexKey: string;
+    bibkey: string;
     fields: ParsedBibtexField[];
 }
 
@@ -35,7 +37,7 @@ export default class BibtexEntryViewPlugin extends Plugin {
     // This will hold the plugin's current settings.
     settings: BibtexEntryViewSettings;
     // This Map will store the BibTeX data in memory for fast access.
-    // The key is the bibtexKey (e.g., "einstein1905"), and the value is the full BibTeX entry string.
+    // The key is the bibkey (e.g., "einstein1905"), and the value is the full BibTeX entry string.
     private bibEntries: Map<string, string> = new Map();
 
     // ONLOAD: This method runs once when the plugin is enabled.
@@ -58,17 +60,18 @@ export default class BibtexEntryViewPlugin extends Plugin {
             await this.loadBibFile();
 
             // --- UPDATED: Use the more efficient registerMarkdownCodeBlockProcessor ---
-            this.registerMarkdownCodeBlockProcessor("bibtexkey", (source, element, context) => {
-                // If auto-rendering is turned off, we must manually reconstruct the original code block.
+            // This processor specifically targets code blocks with the "bibkey" language.
+            this.registerMarkdownCodeBlockProcessor("bibkey", (source, element, context) => {
+                // If auto-rendering is turned off, we must manually reconstruct the original code block to make it visible.
                 if (!this.settings.autoRender) {
                     element.createEl('pre').createEl('code', { text: source });
                     return;
                 }
 
-                const bibtexKey = source.trim();
-                if (!bibtexKey) return;
+                const bibkey = source.trim();
+                if (!bibkey) return;
 
-                const bibEntry = this.bibEntries.get(bibtexKey);
+                const bibEntry = this.bibEntries.get(bibkey);
 
                 // 'element' is the container div provided by Obsidian. We don't need to empty it or replace it.
                 if (bibEntry) {
@@ -78,7 +81,7 @@ export default class BibtexEntryViewPlugin extends Plugin {
                         const entryCode = entryPre.createEl('code', { cls: 'bibtex-entry-view' });
                         
                         // Build the styled entry programmatically.
-                        entryCode.createEl('span', { text: parsedEntry.bibtexKey, cls: 'bibtex-key' });
+                        entryCode.createEl('span', { text: parsedEntry.bibkey, cls: 'bibkey' });
                         
                         parsedEntry.fields.forEach((field) => {
                             entryCode.appendText('\n');
@@ -88,12 +91,12 @@ export default class BibtexEntryViewPlugin extends Plugin {
                         });
                     }
                 } else {
-                    // If the bibtexKey is not found, render an error message.
+                    // If the bibkey is not found, render an error message.
                     const entryPre = element.createEl('pre');
                     const entryCode = entryPre.createEl('code', { cls: 'bibtex-entry-view bibtex-error' });
                     entryCode.createEl('span', {
-                        text: bibtexKey,
-                        cls: 'bibtex-invalid-key'
+                        text: bibkey,
+                        cls: 'bibkey-invalid-key'
                     });
                 }
             });
@@ -115,15 +118,16 @@ export default class BibtexEntryViewPlugin extends Plugin {
     // --- NEW: Methods to manage the plugin's stylesheet ---
     addStyles() {
         // Create a style element and add our CSS rules.
+        // This is more robust than inline styles and prevents flickering.
         const css = `
-            .bibtex-key {
+            .bibkey {
                 color: var(--text-accent);
                 font-weight: bold;
             }
             .bibtex-field-name, .bibtex-entrytype {
                 color: var(--text-muted);
             }
-            .bibtex-invalid-key {
+            .bibkey-invalid-key {
                 color: red;
                 text-decoration: line-through;
             }
@@ -135,7 +139,7 @@ export default class BibtexEntryViewPlugin extends Plugin {
     }
 
     removeStyles() {
-        // Find our style element by its ID and remove it.
+        // Find our style element by its ID and remove it to keep Obsidian clean when the plugin unloads.
         const styleEl = document.getElementById('bibtex-entry-view-styles');
         if (styleEl) {
             styleEl.remove();
@@ -194,12 +198,12 @@ export default class BibtexEntryViewPlugin extends Plugin {
         // .slice(1) is used to discard the text before the first '@'.
         for (const rawEntry of content.split('@').slice(1)) {
             const fullEntry = '@' + rawEntry.trim();
-            // This regex extracts the bibtexKey from the entry (e.g., "einstein1905").
+            // This regex extracts the bibkey from the entry (e.g., "einstein1905").
             const keyMatch = rawEntry.match(/^\s*\w+\s*\{([\w\d\-_\.]+?)\s*[,}]/);
             if (keyMatch && keyMatch[1]) {
-                const bibtexKey = keyMatch[1].trim();
+                const bibkey = keyMatch[1].trim();
                 // If a key is found, store the full entry in the map.
-                this.bibEntries.set(bibtexKey, fullEntry);
+                this.bibEntries.set(bibkey, fullEntry);
             }
         }
     }
@@ -216,7 +220,7 @@ export default class BibtexEntryViewPlugin extends Plugin {
             if (!headerMatch) return null; // Return null if parsing fails
 
             const entryType = headerMatch[1];
-            const bibtexKey = headerMatch[2];
+            const bibkey = headerMatch[2];
             const body = entry.substring(headerMatch[0].length, entry.length - 1).trim();
 
             // Step 2: Extract all key-value fields into a map.
@@ -229,9 +233,6 @@ export default class BibtexEntryViewPlugin extends Plugin {
                 fields.set(fieldName, fullFieldString);
             }
             
-            // --- UPDATED: Add 'entrytype' to the map to be sorted and rendered like other fields ---
-            fields.set('entrytype', `entrytype = {${entryType}}`);
-            
             // Step 3: Remove fields we never want to show.
             const fieldsToRemove = ['abstract', 'creationdate', 'modificationdate', 'citationkey', 'language', 'keywords'];
             fieldsToRemove.forEach(fieldName => fields.delete(fieldName.toLowerCase()));
@@ -241,11 +242,12 @@ export default class BibtexEntryViewPlugin extends Plugin {
             
             // This array defines the exact order we want the fields to appear in.
             const priorityOrder = [
-                'author', 'editor', 'year', 'entrytype', 'title', 'subtitle', 
+                'author', 'editor', 'year', 'title', 'subtitle', 
                 'booktitle', 'booksubtitle', 'edition', 'journal', 'series', 'volume', 
                 'number', 'pages', 'address', 'publisher'
             ];
             
+            // Helper function to process and add a field to our ordered list.
             const addField = (fieldName: string) => {
                 const fullFieldString = fields.get(fieldName)!;
                 const separatorIndex = fullFieldString.indexOf('=');
@@ -299,7 +301,7 @@ export default class BibtexEntryViewPlugin extends Plugin {
             }
 
             // Step 5: Return the structured object
-            return { entryType, bibtexKey, fields: orderedFields };
+            return { entryType, bibkey, fields: orderedFields };
         } catch (error) {
             console.error("BibTeX Plugin: Error reordering fields, returning null.", error);
             return null; // On any failure, return null.
@@ -321,15 +323,11 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
         const { containerEl } = this;
         containerEl.empty(); // Clear previous settings to prevent duplication
         containerEl.createEl('h2', { text: 'BibTeX Entry View Settings' });
-
-        new Setting(containerEl)
-            .setName('How to Use:')
-            .setDesc('Put the needed bibtexKey in the codeblock of the language name \'bibtexkey\'.')
         
         // --- NEW: Toggle to enable/disable rendering ---
         new Setting(containerEl)
-            .setName('Enable Rendering')
-            .setDesc('Dynamically render `bibtexkey` blocks.')
+            .setName('Enable Automatic Rendering')
+            .setDesc('Dynamically render `bibkey` blocks in Reading View.')
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.autoRender)
                 .onChange(async (value) => {
