@@ -1,11 +1,13 @@
-import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, TextComponent, MarkdownPostProcessorContext } from 'obsidian';
+import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, TextComponent, TextAreaComponent } from 'obsidian';
 
 // 1. SETTINGS INTERFACE: Defines the shape of our plugin's data
 // This interface ensures that any settings object we use has the correct properties and types.
 // It helps prevent errors by enabling TypeScript's static type-checking.
 interface BibtexEntryViewSettings {
     bibFilePath: string;
-    autoRender: boolean; // --- NEW: Setting for the toggle ---
+    autoRender: boolean; 
+    fieldSortOrder: string[]; 
+    fieldsToRemove: string[]; // --- NEW: Setting for fields to remove ---
 }
 
 // 2. DEFAULT SETTINGS: Provides default values for a fresh installation
@@ -13,17 +15,24 @@ interface BibtexEntryViewSettings {
 // or when the settings data file is missing or corrupt.
 const DEFAULT_SETTINGS: BibtexEntryViewSettings = {
     bibFilePath: '',
-    autoRender: true // --- NEW: Default to rendering being enabled ---
+    autoRender: true,
+    fieldSortOrder: [
+        'author', 'editor', 'year', 'title', 'subtitle', 
+        'booktitle', 'booksubtitle', 'edition', 'journal', 'series', 'volume', 
+        'number', 'pages', 'address', 'publisher'
+    ],
+    // --- NEW: Default fields to remove ---
+    fieldsToRemove: [
+        'abstract', 'creationdate', 'modificationdate', 'citationkey', 'language', 'keywords'
+    ]
 }
 
 // --- UPDATED: Interface for parsed BibTeX data to be rendered ---
-// This defines the structure for a single field after it has been parsed.
 interface ParsedBibtexField {
     fieldName: string;
     fieldValue: string; // Stores the raw value without brackets
 }
 
-// This defines the structure for a fully parsed and ready-to-render BibTeX entry.
 interface FormattedBibtexEntry {
     entryType: string;
     bibkey: string;
@@ -233,19 +242,15 @@ export default class BibtexEntryViewPlugin extends Plugin {
                 fields.set(fieldName, fullFieldString);
             }
             
-            // Step 3: Remove fields we never want to show.
-            const fieldsToRemove = ['abstract', 'creationdate', 'modificationdate', 'citationkey', 'language', 'keywords'];
+            // Step 3: Remove fields we never want to show, based on user settings.
+            const fieldsToRemove = this.settings.fieldsToRemove;
             fieldsToRemove.forEach(fieldName => fields.delete(fieldName.toLowerCase()));
 
             // Step 4: Build the final list of fields in the desired order.
             const orderedFields: ParsedBibtexField[] = [];
             
-            // This array defines the exact order we want the fields to appear in.
-            const priorityOrder = [
-                'author', 'editor', 'year', 'title', 'subtitle', 
-                'booktitle', 'booksubtitle', 'edition', 'journal', 'series', 'volume', 
-                'number', 'pages', 'address', 'publisher'
-            ];
+            // --- UPDATED: Use the sort order from settings ---
+            const priorityOrder = this.settings.fieldSortOrder;
             
             // Helper function to process and add a field to our ordered list.
             const addField = (fieldName: string) => {
@@ -336,6 +341,41 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
                     this.plugin.app.workspace.updateOptions(); // --- UPDATED: Explicitly update workspace
                     new Notice('Rendering setting updated.');
                 }));
+        
+        // --- NEW: Setting to customize field sort order ---
+        new Setting(containerEl)
+            .setName('Field Sort Order')
+            .setDesc('List the BibTeX fields in the order you want them to be rendered. One field name per line.')
+            .addTextArea(text => {
+                text
+                    .setValue(this.plugin.settings.fieldSortOrder.join('\n'))
+                    .onChange(async (value) => {
+                        // Parse the text area content into an array
+                        const newOrder = value.split('\n').map(field => field.trim()).filter(field => field.length > 0);
+                        this.plugin.settings.fieldSortOrder = newOrder;
+                        await this.plugin.saveSettings();
+                        this.plugin.app.workspace.updateOptions();
+                    });
+                text.inputEl.rows = 10;
+                text.inputEl.cols = 30;
+            });
+            
+        // --- NEW: Setting to customize which fields are removed ---
+        new Setting(containerEl)
+            .setName('Fields to Remove')
+            .setDesc('List the BibTeX fields you want to remove from the rendering. One field name per line.')
+            .addTextArea(text => {
+                text
+                    .setValue(this.plugin.settings.fieldsToRemove.join('\n'))
+                    .onChange(async (value) => {
+                        const newFieldsToRemove = value.split('\n').map(field => field.trim()).filter(field => field.length > 0);
+                        this.plugin.settings.fieldsToRemove = newFieldsToRemove;
+                        await this.plugin.saveSettings();
+                        this.plugin.app.workspace.updateOptions();
+                    });
+                text.inputEl.rows = 6;
+                text.inputEl.cols = 30;
+            });
         
         // A read-only text field to show the user which file is currently active.
         new Setting(containerEl)
