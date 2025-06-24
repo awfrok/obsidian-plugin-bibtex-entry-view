@@ -7,7 +7,7 @@ interface BibtexEntryViewSettings {
     bibFilePath: string;
     enableRendering: boolean; 
     fieldSortOrder: string[]; 
-    fieldsToRemove: string[]; // --- NEW: Setting for fields to remove ---
+    fieldsToRemove: string[];
 }
 
 // 2. DEFAULT SETTINGS: Provides default values for a fresh installation
@@ -21,7 +21,6 @@ const DEFAULT_SETTINGS: BibtexEntryViewSettings = {
         'booktitle', 'booksubtitle', 'edition', 'journal', 'series', 'volume', 
         'number', 'pages', 'address', 'publisher'
     ],
-    // --- NEW: Default fields to remove ---
     fieldsToRemove: [
         'abstract', 'creationdate', 'modificationdate', 'citationkey', 'language', 'keywords'
     ]
@@ -61,6 +60,16 @@ export default class BibtexEntryViewPlugin extends Plugin {
 
         // Add the settings tab to Obsidian's settings window.
         this.addSettingTab(new BibtexEntryViewSettingTab(this.app, this));
+
+        // --- NEW: Register a file watcher to automatically reload the .bib file on change ---
+        this.registerEvent(this.app.vault.on('modify', async (file) => {
+            // Check if the modified file is the one we are watching.
+            if (file.path === this.settings.bibFilePath) {
+                console.log('BibTeX file modified. Reloading...');
+                await this.loadBibFile();
+                this.app.workspace.updateOptions(); // Refresh views to show changes
+            }
+        }));
 
         // Defer the initial loading and processor registration until the entire Obsidian workspace is fully ready.
         // This is the standard, safe way to avoid startup errors.
@@ -168,6 +177,9 @@ export default class BibtexEntryViewPlugin extends Plugin {
     // Saves the plugin's current settings to the data.json file.
     async saveSettings() {
         await this.saveData(this.settings);
+        // After saving settings, always reload the bib file and refresh views
+        await this.loadBibFile();
+        this.app.workspace.updateOptions();
     }
     
     // Reads the content of the .bib file specified in the settings and parses it.
@@ -275,27 +287,18 @@ export default class BibtexEntryViewPlugin extends Plugin {
                 fields.delete(fieldName);
             }
 
-            // Handle the special case for author/editor. Use author if it exists; otherwise, use editor.
+            // --- UPDATED: Handle the special case for author/editor. ---
             if (fields.has('author')) {
                 addField('author');
-                fields.delete('editor'); // Prevent editor from appearing again later
             } else if (fields.has('editor')) {
                 addField('editor');
             }
-
-            const prioritySet = new Set(['author', 'editor']); // Keep track of fields already added
-
+            
             // Iterate through our priority list and add the fields in order.
             for (const fieldName of priorityOrder) {
-                if (prioritySet.has(fieldName)) continue; // Skip author/editor, already handled
-
+                // If the field exists in our map of remaining fields, add it.
                 if (fields.has(fieldName)) {
-                    // Ensure subtitle/booksubtitle only appear if their parent title exists.
-                    if (fieldName === 'subtitle' && !prioritySet.has('title')) continue;
-                    if (fieldName === 'booksubtitle' && !prioritySet.has('booktitle')) continue;
-
                     addField(fieldName);
-                    prioritySet.add(fieldName);
                 }
             }
             
@@ -338,7 +341,6 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
                 .onChange(async (value) => {
                     this.plugin.settings.enableRendering = value;
                     await this.plugin.saveSettings();
-                    this.plugin.app.workspace.updateOptions(); // --- UPDATED: Explicitly update workspace
                     new Notice('Rendering setting updated.');
                 }));
         
@@ -357,20 +359,18 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
             .setDesc('Choose a file from your vault or import one from your computer.')
             .addButton(button => button
                 .setButtonText('Browse Vault')
-                .setTooltip('Select a .bib file already in your vault')
+                .setTooltip('Select a .bib file from your vault')
                 .onClick(() => {
                     // Opens our custom file selection modal.
                     new BibFileSelectionModal(this.app, async (selectedPath) => {
                         this.plugin.settings.bibFilePath = selectedPath;
                         await this.plugin.saveSettings();
-                        await this.plugin.loadBibFile();
-                        this.plugin.app.workspace.updateOptions();
                         this.display(); // Re-render the settings tab to show the new path
                     }).open();
                 }))
             .addButton(button => button
-                .setButtonText('Import an External File')
-                .setTooltip('Copy a .bib file from your computer into the vault')
+                .setButtonText('Import an External File to Current .bib file')
+                .setTooltip('Beware. Replace the current .bib file with the chosen .bib file.')
                 .onClick(() => {
                     // This creates a hidden file input element and programmatically "clicks" it
                     // to open the system's native file browser.
@@ -398,8 +398,6 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
                             // Update the settings to use the newly imported file.
                             this.plugin.settings.bibFilePath = newPath;
                             await this.plugin.saveSettings();
-                            await this.plugin.loadBibFile();
-                            this.plugin.app.workspace.updateOptions();
                             this.display();
                         } catch (error) {
                             new Notice(`Error importing file: ${error.message}`);
@@ -420,7 +418,6 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
                         const newOrder = value.split('\n').map(field => field.trim()).filter(field => field.length > 0);
                         this.plugin.settings.fieldSortOrder = newOrder;
                         await this.plugin.saveSettings();
-                        this.plugin.app.workspace.updateOptions();
                     });
                 text.inputEl.rows = 10;
                 text.inputEl.cols = 30;
@@ -437,7 +434,6 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
                         const newFieldsToRemove = value.split('\n').map(field => field.trim()).filter(field => field.length > 0);
                         this.plugin.settings.fieldsToRemove = newFieldsToRemove;
                         await this.plugin.saveSettings();
-                        this.plugin.app.workspace.updateOptions();
                     });
                 text.inputEl.rows = 6;
                 text.inputEl.cols = 30;
