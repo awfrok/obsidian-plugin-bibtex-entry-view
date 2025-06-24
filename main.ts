@@ -1,82 +1,63 @@
 import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, TextComponent, TextAreaComponent } from 'obsidian';
 
-// 1. SETTINGS INTERFACE: Defines the shape of our plugin's data
-// This interface ensures that any settings object we use has the correct properties and types.
-// It helps prevent errors by enabling TypeScript's static type-checking.
+// 1. SETTINGS INTERFACE
 interface BibtexEntryViewSettings {
     bibFilePath: string;
-    enableRendering: boolean; 
-    fieldSortOrder: string[]; 
+    enableRendering: boolean;
+    fieldSortOrder: string[];
     fieldsToRemove: string[];
 }
 
-// 2. DEFAULT SETTINGS: Provides default values for a fresh installation
-// This constant holds the initial settings for when the plugin is first installed
-// or when the settings data file is missing or corrupt.
+// 2. DEFAULT SETTINGS
 const DEFAULT_SETTINGS: BibtexEntryViewSettings = {
     bibFilePath: '',
     enableRendering: true,
     fieldSortOrder: [
-        'author', 'editor', 'year', 'title', 'subtitle', 
-        'booktitle', 'booksubtitle', 'edition', 'journal', 'series', 'volume', 
+        'author', 'year', 'title', 'subtitle', 'editor', 
+        'booktitle', 'booksubtitle', 'edition', 'journal', 'series', 'volume',
         'number', 'pages', 'address', 'publisher'
     ],
     fieldsToRemove: [
         'abstract', 'creationdate', 'modificationdate', 'citationkey', 'language', 'keywords'
     ]
-}
+};
 
-// --- UPDATED: Interface for parsed BibTeX data to be rendered ---
-// This defines the structure for a single field after it has been parsed.
+// --- DATA STRUCTURE INTERFACES ---
 interface ParsedBibtexField {
-    fieldName: string;
-    fieldValue: string; // Stores the raw value without brackets
+    fieldName: string; // Keeps original casing
+    fieldValue: string;
 }
 
-// This defines the structure for a fully parsed and ready-to-render BibTeX entry.
 interface FormattedBibtexEntry {
     entryType: string;
     bibkey: string;
     fields: ParsedBibtexField[];
 }
 
-
-// 3. MAIN PLUGIN CLASS: This is the heart of the plugin
-// It extends Obsidian's Plugin class and contains the core logic.
+// 3. MAIN PLUGIN CLASS
 export default class BibtexEntryViewPlugin extends Plugin {
     settings: BibtexEntryViewSettings;
     private bibEntries: Map<string, string> = new Map();
 
-    // ONLOAD: This method runs once when the plugin is enabled.
     async onload() {
-        // Load any settings saved on disk, merging them with the defaults.
         await this.loadSettings();
         
-        // Inject custom CSS for persistent styling
         this.addStyles();
-
-        // Add the settings tab to Obsidian's settings window.
         this.addSettingTab(new BibtexEntryViewSettingTab(this.app, this));
 
-        // Register a file watcher to automatically reload the .bib file on change
         this.registerEvent(this.app.vault.on('modify', async (file) => {
             if (file.path === this.settings.bibFilePath) {
                 await this.loadBibFile();
-                this.app.workspace.updateOptions(); // Refresh views to show changes
+                this.app.workspace.updateOptions();
             }
         }));
 
-        // Defer the initial loading and processor registration until the entire Obsidian workspace is fully ready.
-        // This is the standard, safe way to avoid startup errors.
         this.app.workspace.onLayoutReady(async () => {
             await this.loadBibFile();
 
-            // Use the more efficient registerMarkdownCodeBlockProcessor.
-            // This processor specifically targets code blocks with the "bibkey" language.
             this.registerMarkdownCodeBlockProcessor("bibkey", (source, element, context) => {
-                // If auto-rendering is turned off, we must manually reconstruct the original code block to make it visible.
                 if (!this.settings.enableRendering) {
-                    element.createEl('pre').createEl('code', { text: source });
+                    element.createEl('pre').createEl('code', { text: `\`\`\`bibkey\n${source}\n\`\`\`` });
                     return;
                 }
 
@@ -84,15 +65,14 @@ export default class BibtexEntryViewPlugin extends Plugin {
                 if (!bibkey) return;
 
                 const bibEntry = this.bibEntries.get(bibkey);
+                element.empty(); // Clear the container
 
-                // 'element' is the container div provided by Obsidian.
                 if (bibEntry) {
-                    const parsedEntry = this.reorderAndFormatBibtex(bibEntry);
+                    const parsedEntry = this.formatAndSortBibtexEntry(bibEntry);
                     if (parsedEntry) {
                         const entryPre = element.createEl('pre');
                         const entryCode = entryPre.createEl('code', { cls: 'bibtex-entry-view' });
                         
-                        // Build the styled entry programmatically.
                         entryCode.createEl('span', { text: parsedEntry.bibkey, cls: 'bibkey' });
                         
                         parsedEntry.fields.forEach((field) => {
@@ -103,7 +83,6 @@ export default class BibtexEntryViewPlugin extends Plugin {
                         });
                     }
                 } else {
-                    // If the bibkey is not found, render an error message.
                     const entryPre = element.createEl('pre');
                     const entryCode = entryPre.createEl('code', { cls: 'bibtex-entry-view bibtex-error' });
                     entryCode.createEl('span', {
@@ -113,22 +92,17 @@ export default class BibtexEntryViewPlugin extends Plugin {
                 }
             });
 
-            // Force any currently open documents to re-render to apply our new processor.
             this.app.workspace.updateOptions();
         });
     }
 
-    // ONUNLOAD: This method runs when the plugin is disabled.
     onunload() {
-        // Clear the in-memory BibTeX data and remove custom styles to keep Obsidian clean.
         this.bibEntries.clear();
         this.removeStyles();
     }
     
     // --- Stylesheet Management ---
     addStyles() {
-        // Create a style element and add our CSS rules.
-        // This is more robust than inline styles and prevents flickering.
         const css = `
             .bibkey {
                 color: var(--text-accent);
@@ -142,143 +116,169 @@ export default class BibtexEntryViewPlugin extends Plugin {
                 font-weight: bold;
             }
             .bibkey-invalid-key {
-                color: red;
-                opacity: 0.5;
+                color: var(--text-error);
+                opacity: 0.6;
                 text-decoration: line-through;
+            }
+            .bibtex-file-item {
+                cursor: pointer; 
+                padding: 8px 10px; 
+                border-radius: var(--radius-s);
+            }
+            .bibtex-file-item:hover {
+                background-color: var(--background-modifier-hover);
             }
         `;
         const styleEl = document.createElement('style');
-        styleEl.id = 'bibtex-entry-view-styles'; // Give it an ID for easy removal later
+        styleEl.id = 'bibtex-entry-view-styles';
         styleEl.appendChild(document.createTextNode(css));
         document.head.appendChild(styleEl);
     }
 
     removeStyles() {
-        // Find our style element by its ID and remove it.
         const styleEl = document.getElementById('bibtex-entry-view-styles');
         if (styleEl) {
             styleEl.remove();
         }
     }
 
-
+    // --- Settings Management ---
     async loadSettings() {
         this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
     }
 
     async saveSettings() {
         await this.saveData(this.settings);
-        // After saving settings, always reload the bib file and refresh views
         await this.loadBibFile();
         this.app.workspace.updateOptions();
     }
     
-    // --- Bibtexentry Management ---
-    public async loadBibFile() {
+    // --- BibTeX Data Management ---
+    async loadBibFile() {
         this.bibEntries.clear();
         const { bibFilePath } = this.settings;
 
         if (!bibFilePath) {
-            return; // Don't show a notice if no file is selected yet.
+            return;
         }
 
         const bibFile = this.app.vault.getAbstractFileByPath(bibFilePath);
 
         if (!(bibFile instanceof TFile)) {
-            new Notice(`BibTeX Plugin: Could not find file at: ${bibFilePath}`);
+            new Notice(`BibtexEntryView: Could not find file at: ${bibFilePath}`);
             return;
         }
 
         try {
             const content = await this.app.vault.read(bibFile);
             this.parseBibtexContent(content);
-            new Notice(`BibTeX Plugin: Loaded ${this.bibEntries.size} entries.`);
+            new Notice(`BibtexEntryView: Loaded ${this.bibEntries.size} entries.`);
         } catch (error) {
-            new Notice('BibTeX Plugin: Error reading or parsing .bib file.');
-            console.error('BibTeX Plugin Error:', error);
+            new Notice('BibtexEntryView: Error reading or parsing .bib file.');
+            console.error('BibtexEntryView Error:', error);
         }
     }
     
     private parseBibtexContent(content: string) {
-        for (const rawEntry of content.split('@').slice(1)) {
-            const fullEntry = '@' + rawEntry.trim();
-            const keyMatch = rawEntry.match(/^\s*\w+\s*\{([\w\d\-_\.]+?)\s*[,}]/);
+        // Regex to match a complete BibTeX entry, robustly handling nested braces.
+        const entryRegex = /@\w+\s*\{[^,]+,(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*?\s*\}/gs;
+        const entries = content.match(entryRegex);
+
+        if (!entries) {
+            return;
+        }
+
+        for (const fullEntry of entries) {
+            const keyMatch = fullEntry.match(/^@\w+\s*\{([\w\d\-_\.]+?)\s*[,}]/);
             if (keyMatch && keyMatch[1]) {
                 const bibkey = keyMatch[1].trim();
-                this.bibEntries.set(bibkey, fullEntry);
+                this.bibEntries.set(bibkey, fullEntry.trim());
             }
         }
     }
 
-    private reorderAndFormatBibtex(entry: string): FormattedBibtexEntry | null {
+    private formatAndSortBibtexEntry(entry: string): FormattedBibtexEntry | null {
         try {
             const headerMatch = entry.match(/^@(\w+)\s*\{\s*([^,]+),/);
             if (!headerMatch) return null;
 
             const entryType = headerMatch[1];
             const bibkey = headerMatch[2];
-            const body = entry.substring(headerMatch[0].length, entry.length - 1).trim();
+            const body = entry.substring(headerMatch[0].length, entry.lastIndexOf('}'));
 
             const fieldRegex = /\s*(\w+)\s*=\s*({(?:[^{}]|{(?:[^{}]|{[^{}]*})*})*}|"(?:[^"\\]|\\.)*")/g;
-            const fields = new Map<string, string>();
+            const parsedFields: ParsedBibtexField[] = [];
             let match;
+
+            const fieldsToRemoveLower = this.settings.fieldsToRemove.map(f => f.toLowerCase());
+
             while ((match = fieldRegex.exec(body)) !== null) {
-                const fieldName = match[1].toLowerCase();
-                const fullFieldString = match[0].trim();
-                fields.set(fieldName, fullFieldString);
-            }
-            
-            this.settings.fieldsToRemove.forEach(fieldName => fields.delete(fieldName.toLowerCase()));
+                const fieldName = match[1];
+                const fieldNameLower = fieldName.toLowerCase();
 
-            const orderedFields: ParsedBibtexField[] = [];
-            const priorityOrder = this.settings.fieldSortOrder;
-            
-            const addField = (fieldName: string) => {
-                const fullFieldString = fields.get(fieldName)!;
-                const separatorIndex = fullFieldString.indexOf('=');
+                if (fieldsToRemoveLower.includes(fieldNameLower)) {
+                    continue;
+                }
+
+                // Extract the value part, which is everything after the '='
+                const valueMatch = match[0].match(/=\s*(.*)/s);
+                let fieldValuePart = valueMatch ? valueMatch[1].trim() : '';
                 
-                const namePart = fullFieldString.substring(0, separatorIndex).trim();
-                let valuePart = fullFieldString.substring(separatorIndex + 1).trim();
-
-                if ((valuePart.startsWith('{') && valuePart.endsWith('}')) || (valuePart.startsWith('"') && valuePart.endsWith('"'))) {
-                    valuePart = valuePart.slice(1, -1);
+                // Remove only the outermost braces or quotes
+                if ((fieldValuePart.startsWith('{') && fieldValuePart.endsWith('}')) || (fieldValuePart.startsWith('"') && fieldValuePart.endsWith('"'))) {
+                    fieldValuePart = fieldValuePart.slice(1, -1);
                 }
 
-                valuePart = valuePart.replace(/[{}]/g, '');
-
-                orderedFields.push({
-                    fieldName: namePart,
-                    fieldValue: valuePart
+                parsedFields.push({
+                    fieldName: fieldName, // Keep original casing
+                    fieldValue: fieldValuePart
                 });
-                fields.delete(fieldName);
             }
 
-            if (fields.has('author')) {
-                addField('author');
-            } else if (fields.has('editor')) {
-                addField('editor');
-            }
-            
-            for (const fieldName of priorityOrder) {
-                if (fields.has(fieldName)) {
-                    addField(fieldName);
+            // REFACTORED AND CORRECTED SORTING LOGIC
+            let primaryField: ParsedBibtexField | undefined;
+            let remainingFields = [...parsedFields];
+
+            // Determine if author exists and extract it as the primary field.
+            const authorIndex = remainingFields.findIndex(f => f.fieldName.toLowerCase() === 'author');
+            if (authorIndex !== -1) {
+                primaryField = remainingFields.splice(authorIndex, 1)[0];
+            } else {
+                // If no author, determine if editor exists and extract it as the primary field.
+                const editorIndex = remainingFields.findIndex(f => f.fieldName.toLowerCase() === 'editor');
+                if (editorIndex !== -1) {
+                    primaryField = remainingFields.splice(editorIndex, 1)[0];
                 }
             }
             
-            const remainingKeys = Array.from(fields.keys()).sort();
-            for (const fieldName of remainingKeys) {
-                addField(fieldName);
-            }
+            const priorityOrder = this.settings.fieldSortOrder.map(f => f.toLowerCase());
+            
+            // Sort the *remaining* fields based on the user's sort order.
+            remainingFields.sort((a, b) => {
+                const fieldNameA = a.fieldName.toLowerCase();
+                const fieldNameB = b.fieldName.toLowerCase();
+                
+                const sortIndexA = priorityOrder.indexOf(fieldNameA);
+                const sortIndexB = priorityOrder.indexOf(fieldNameB);
 
-            return { entryType, bibkey, fields: orderedFields };
+                if (sortIndexA !== -1 && sortIndexB !== -1) return sortIndexA - sortIndexB;
+                if (sortIndexA !== -1) return -1;
+                if (sortIndexB !== -1) return 1;
+                return fieldNameA.localeCompare(fieldNameB);
+            });
+            
+            // Reconstruct the final list, prepending the primary field if it was found.
+            const sortedFields = primaryField ? [primaryField, ...remainingFields] : remainingFields;
+
+            return { entryType, bibkey, fields: sortedFields };
         } catch (error) {
-            console.error("BibTeX Plugin: Error reordering fields, returning null.", error);
+            console.error("BibtexEntryView: Error formatting entry, returning null.", error);
             return null;
         }
     }
 }
 
-// 4. SETTINGS TAB CLASS: Defines the UI for the plugin's settings
+// 4. SETTINGS TAB CLASS
 class BibtexEntryViewSettingTab extends PluginSettingTab {
     plugin: BibtexEntryViewPlugin;
 
@@ -291,41 +291,41 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
         const { containerEl } = this;
         containerEl.empty();
         
+        containerEl.createEl('h2', { text: 'BibTeX Entry View Settings' });
+
         new Setting(containerEl)
             .setName('Enable rendering')
-            .setDesc('Turn on or off rendering for bibkey code blocks.')
+            .setDesc('If disabled, bibkey code blocks will not be rendered.')
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.enableRendering)
-                .onChange(async (value) => {
+                .onChange((value) => {
                     this.plugin.settings.enableRendering = value;
-                    await this.plugin.saveSettings();
-                    new Notice('Rendering setting updated.');
                 }));
         
         new Setting(containerEl)
             .setName('Current .bib file')
-            .setDesc('The .bib file name in the vault.')
+            .setDesc('This is the file the plugin is currently using.')
             .addText(text => text
                 .setValue(this.plugin.settings.bibFilePath)
+                .setPlaceholder('No file selected')
                 .setDisabled(true)
             );
         
         new Setting(containerEl)
             .setName('Select or import a .bib file')
-            .setDesc('Select or import.')
+            .setDesc('Choose a file from your vault or import one from your computer.')
             .addButton(button => button
-                .setButtonText('Select a .bib in the vault')
-                .setTooltip('Select a .bib file in your vault')
+                .setButtonText('Select from vault')
+                .setTooltip('Select a .bib file already in your vault')
                 .onClick(() => {
-                    new BibFileSelectionModal(this.app, async (selectedPath) => {
+                    new BibFileSelectionModal(this.app, (selectedPath) => {
                         this.plugin.settings.bibFilePath = selectedPath;
-                        await this.plugin.saveSettings();
-                        this.display();
+                        this.display(); // Refresh the settings screen
                     }).open();
                 }))
             .addButton(button => button
-                .setButtonText('Import a .bib to the valt')
-                .setTooltip('Beware: This will overwrite any file with the same name in the vault.')
+                .setButtonText('Import to vault')
+                .setTooltip('This will overwrite any file with the same name in the vault.')
                 .onClick(() => {
                     const fileInput = document.createElement('input');
                     fileInput.type = 'file';
@@ -341,17 +341,16 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
                             const existingFile = this.app.vault.getAbstractFileByPath(newPath);
                             if (existingFile instanceof TFile) {
                                 await this.app.vault.modify(existingFile, content);
-                                new Notice(`Overwrote existing file: ${newPath}`);
+                                // new Notice(`Overwrote existing file: ${newPath}`);
                             } else {
                                 await this.app.vault.create(newPath, content);
-                                new Notice(`Imported and saved file as: ${newPath}`);
+                                // new Notice(`Imported and saved file as: ${newPath}`);
                             }
                             
                             this.plugin.settings.bibFilePath = newPath;
-                            await this.plugin.saveSettings();
-                            this.display();
+                            this.display(); // Refresh settings
                         } catch (error) {
-                            new Notice(`Error importing file: ${error.message}`);
+                            new Notice(`BibtexEntryView: Error importing file: ${error.message}`);
                         }
                     };
                     fileInput.click();
@@ -359,13 +358,12 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
         
         new Setting(containerEl)
             .setName('Field sort order')
-            .setDesc('List the BibTeX fields in the order you want them to be rendered. One field name per line.')
+            .setDesc('List BibTeX fields in the desired render order. One field per line.')
             .addTextArea(text => {
                 text
                     .setValue(this.plugin.settings.fieldSortOrder.join('\n'))
-                    .onChange(async (value) => {
-                        const newOrder = value.split('\n').map(field => field.trim()).filter(field => field.length > 0);
-                        this.plugin.settings.fieldSortOrder = newOrder;
+                    .onChange((value) => {
+                        this.plugin.settings.fieldSortOrder = value.split('\n').map(field => field.trim()).filter(Boolean);
                     });
                 text.inputEl.rows = 10;
                 text.inputEl.cols = 30;
@@ -373,27 +371,30 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
             
         new Setting(containerEl)
             .setName('Fields to remove')
-            .setDesc('List the BibTeX fields you want to remove from the rendering. One field name per line.')
+            .setDesc('List BibTeX fields to exclude from rendering. One field per line.')
             .addTextArea(text => {
                 text
                     .setValue(this.plugin.settings.fieldsToRemove.join('\n'))
-                    .onChange(async (value) => {
-                        const newFieldsToRemove = value.split('\n').map(field => field.trim()).filter(field => field.length > 0);
-                        this.plugin.settings.fieldsToRemove = newFieldsToRemove;
-                        await this.plugin.saveSettings();
+                    .onChange((value) => {
+                        this.plugin.settings.fieldsToRemove = value.split('\n').map(field => field.trim()).filter(Boolean);
                     });
                 text.inputEl.rows = 6;
                 text.inputEl.cols = 30;
             });
     }
+
+    hide(): void {
+        this.plugin.saveSettings();
+    }
 }
 
-// 5. FILE SELECTION MODAL: The popup for browsing vault files
+// 5. FILE SELECTION MODAL
 class BibFileSelectionModal extends Modal {
     onChooseFile: (path: string) => void;
     private bibFiles: TFile[];
 
     constructor(app: App, onChooseFile: (path: string) => void) {
+        // CORRECTED: The 'super' call now only passes 'app', as expected by the Modal constructor.
         super(app);
         this.onChooseFile = onChooseFile;
         this.bibFiles = this.app.vault.getFiles()
@@ -416,24 +417,23 @@ class BibFileSelectionModal extends Modal {
         const updateList = (filter: string) => {
             listEl.empty();
             const filtered = this.bibFiles.filter(f => f.path.toLowerCase().includes(filter.toLowerCase()));
+            
             if (!filtered.length) {
                 listEl.createEl('p', { text: 'No matching .bib files found.' });
                 return;
             }
+
             filtered.forEach(file => {
                 const item = listEl.createEl('div', { text: file.path, cls: 'bibtex-file-item' });
-                item.style.cssText = 'cursor: pointer; padding: 8px 10px; border-radius: var(--radius-s);';
-                item.onmouseover = () => item.style.backgroundColor = 'var(--background-modifier-hover)';
-                item.onmouseout = () => item.style.backgroundColor = 'transparent';
-                item.onclick = () => {
+                item.addEventListener('click', () => {
                     this.onChooseFile(file.path);
                     this.close();
-                };
+                });
             });
         };
 
         searchInput.onChange(updateList);
-        updateList('');
+        updateList(''); // Initial display
     }
 
     onClose() {
