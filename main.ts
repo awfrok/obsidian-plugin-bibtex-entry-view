@@ -17,7 +17,7 @@ const DEFAULT_SETTINGS: BibtexEntryViewSettings = {
     bibFilePath: '',
     enableRendering: true,
     fieldSortOrder: [
-        'author', 'editor', 'year', 'title', 'subtitle', 
+        'author', 'year', 'entrytype', 'title', 'subtitle', 'editor',
         'booktitle', 'booksubtitle', 'edition', 'journal', 'series', 'volume', 
         'number', 'pages', 'address', 'publisher'
     ],
@@ -254,6 +254,9 @@ export default class BibtexEntryViewPlugin extends Plugin {
                 fields.set(fieldName, fullFieldString);
             }
             
+            // --- UPDATED: Add 'entrytype' to the map to be sorted and rendered like other fields ---
+            fields.set('entrytype', `entrytype = {${entryType}}`);
+            
             // Step 3: Remove fields we never want to show, based on user settings.
             const fieldsToRemove = this.settings.fieldsToRemove;
             fieldsToRemove.forEach(fieldName => fields.delete(fieldName.toLowerCase()));
@@ -359,7 +362,7 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
             .setDesc('Choose a file from your vault or import one from your computer.')
             .addButton(button => button
                 .setButtonText('Browse Vault')
-                .setTooltip('Select a .bib file from your vault')
+                .setTooltip('Select a .bib file already in your vault')
                 .onClick(() => {
                     // Opens our custom file selection modal.
                     new BibFileSelectionModal(this.app, async (selectedPath) => {
@@ -369,8 +372,8 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
                     }).open();
                 }))
             .addButton(button => button
-                .setButtonText('Import an External File to Current .bib file')
-                .setTooltip('Beware. Replace the current .bib file with the chosen .bib file.')
+                .setButtonText('Import an External File')
+                .setTooltip('Beware: This will import the chosen .bib file and replace the current .bib file/symbolic link.')
                 .onClick(() => {
                     // This creates a hidden file input element and programmatically "clicks" it
                     // to open the system's native file browser.
@@ -417,7 +420,7 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
                         // Parse the text area content into an array
                         const newOrder = value.split('\n').map(field => field.trim()).filter(field => field.length > 0);
                         this.plugin.settings.fieldSortOrder = newOrder;
-                        await this.plugin.saveSettings();
+                        //await this.plugin.saveSettings();
                     });
                 text.inputEl.rows = 10;
                 text.inputEl.cols = 30;
@@ -433,7 +436,7 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
                     .onChange(async (value) => {
                         const newFieldsToRemove = value.split('\n').map(field => field.trim()).filter(field => field.length > 0);
                         this.plugin.settings.fieldsToRemove = newFieldsToRemove;
-                        await this.plugin.saveSettings();
+                        //await this.plugin.saveSettings();
                     });
                 text.inputEl.rows = 6;
                 text.inputEl.cols = 30;
