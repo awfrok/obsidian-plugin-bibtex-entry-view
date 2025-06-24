@@ -17,7 +17,7 @@ const DEFAULT_SETTINGS: BibtexEntryViewSettings = {
     bibFilePath: '',
     enableRendering: true,
     fieldSortOrder: [
-        'author', 'year', 'entrytype', 'title', 'subtitle', 'editor',
+        'author', 'year', 'title', 'subtitle', 'editor',
         'booktitle', 'booksubtitle', 'edition', 'journal', 'series', 'volume', 
         'number', 'pages', 'address', 'publisher'
     ],
@@ -104,8 +104,8 @@ export default class BibtexEntryViewPlugin extends Plugin {
                         parsedEntry.fields.forEach((field) => {
                             entryCode.appendText('\n');
                             entryCode.createEl('span', { text: field.fieldName, cls: 'bibtex-field-name' });
-                            entryCode.appendText(': ');
-                            entryCode.createEl('span',{ text: field.fieldValue, cls: 'bibtex-field-value' } )
+                            entryCode.createEl('span', { text: ': ', cls: 'bibtex-field-name' });
+                            entryCode.createEl('span', { text: field.fieldValue, cls: 'bibtex-field-value' } )
                         });
                     }
                 } else {
@@ -143,10 +143,15 @@ export default class BibtexEntryViewPlugin extends Plugin {
                 font-weight: bold;
             }
             .bibtex-field-name, .bibtex-entrytype {
-                color: var(--text-muted);
+                opacity: 50%;
+            }
+            .bibtex-field-value {
+                font-weight: bold;
+                opacity: 65%;
             }
             .bibkey-invalid-key {
                 color: red;
+                opacity: 50%;
                 text-decoration: line-through;
             }
         `;
@@ -420,7 +425,7 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
                         // Parse the text area content into an array
                         const newOrder = value.split('\n').map(field => field.trim()).filter(field => field.length > 0);
                         this.plugin.settings.fieldSortOrder = newOrder;
-                        //await this.plugin.saveSettings();
+                        // comment out: await this.plugin.saveSettings();
                     });
                 text.inputEl.rows = 10;
                 text.inputEl.cols = 30;
@@ -436,7 +441,7 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
                     .onChange(async (value) => {
                         const newFieldsToRemove = value.split('\n').map(field => field.trim()).filter(field => field.length > 0);
                         this.plugin.settings.fieldsToRemove = newFieldsToRemove;
-                        //await this.plugin.saveSettings();
+                        // comment out: await this.plugin.saveSettings();
                     });
                 text.inputEl.rows = 6;
                 text.inputEl.cols = 30;
