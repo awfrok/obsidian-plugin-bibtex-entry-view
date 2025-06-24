@@ -293,7 +293,7 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
         
         new Setting(containerEl)
             .setName('Enable rendering')
-            .setDesc('Turn on or off rendering for `bibkey` code blocks.')
+            .setDesc('Turn on or off rendering for bibkey code blocks.')
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.enableRendering)
                 .onChange(async (value) => {
@@ -304,18 +304,18 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
         
         new Setting(containerEl)
             .setName('Current .bib file')
-            .setDesc('The path to the .bib file this plugin is using, relative to your vault root.')
+            .setDesc('The .bib file name in the vault.')
             .addText(text => text
                 .setValue(this.plugin.settings.bibFilePath)
                 .setDisabled(true)
             );
         
         new Setting(containerEl)
-            .setName('Select or import file')
-            .setDesc('Choose a file from your vault or import one from your computer.')
+            .setName('Select or import a .bib file')
+            .setDesc('Select or import.')
             .addButton(button => button
-                .setButtonText('Browse vault')
-                .setTooltip('Select a .bib file already in your vault')
+                .setButtonText('Select a .bib in the vault')
+                .setTooltip('Select a .bib file in your vault')
                 .onClick(() => {
                     new BibFileSelectionModal(this.app, async (selectedPath) => {
                         this.plugin.settings.bibFilePath = selectedPath;
@@ -324,8 +324,8 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
                     }).open();
                 }))
             .addButton(button => button
-                .setButtonText('Import external file')
-                .setTooltip('Copy a .bib file from your computer into the vault. This will overwrite any file with the same name.')
+                .setButtonText('Import a .bib to the valt')
+                .setTooltip('Beware: This will overwrite any file with the same name in the vault.')
                 .onClick(() => {
                     const fileInput = document.createElement('input');
                     fileInput.type = 'file';
