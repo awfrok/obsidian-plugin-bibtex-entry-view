@@ -5,7 +5,7 @@ import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, TextCompo
 // It helps prevent errors by enabling TypeScript's static type-checking.
 interface BibtexEntryViewSettings {
     bibFilePath: string;
-    autoRender: boolean; 
+    enableRendering: boolean; 
     fieldSortOrder: string[]; 
     fieldsToRemove: string[]; // --- NEW: Setting for fields to remove ---
 }
@@ -15,7 +15,7 @@ interface BibtexEntryViewSettings {
 // or when the settings data file is missing or corrupt.
 const DEFAULT_SETTINGS: BibtexEntryViewSettings = {
     bibFilePath: '',
-    autoRender: true,
+    enableRendering: true,
     fieldSortOrder: [
         'author', 'editor', 'year', 'title', 'subtitle', 
         'booktitle', 'booksubtitle', 'edition', 'journal', 'series', 'volume', 
@@ -72,7 +72,7 @@ export default class BibtexEntryViewPlugin extends Plugin {
             // This processor specifically targets code blocks with the "bibkey" language.
             this.registerMarkdownCodeBlockProcessor("bibkey", (source, element, context) => {
                 // If auto-rendering is turned off, we must manually reconstruct the original code block to make it visible.
-                if (!this.settings.autoRender) {
+                if (!this.settings.enableRendering) {
                     element.createEl('pre').createEl('code', { text: source });
                     return;
                 }
@@ -331,51 +331,16 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
         
         // --- NEW: Toggle to enable/disable rendering ---
         new Setting(containerEl)
-            .setName('Enable Automatic Rendering')
-            .setDesc('Dynamically render `bibkey` blocks in Reading View.')
+            .setName('Enable Rendering')
+            .setDesc('Turn on or off rendering `bibkey` blocks.')
             .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.autoRender)
+                .setValue(this.plugin.settings.enableRendering)
                 .onChange(async (value) => {
-                    this.plugin.settings.autoRender = value;
+                    this.plugin.settings.enableRendering = value;
                     await this.plugin.saveSettings();
                     this.plugin.app.workspace.updateOptions(); // --- UPDATED: Explicitly update workspace
                     new Notice('Rendering setting updated.');
                 }));
-        
-        // --- NEW: Setting to customize field sort order ---
-        new Setting(containerEl)
-            .setName('Field Sort Order')
-            .setDesc('List the BibTeX fields in the order you want them to be rendered. One field name per line.')
-            .addTextArea(text => {
-                text
-                    .setValue(this.plugin.settings.fieldSortOrder.join('\n'))
-                    .onChange(async (value) => {
-                        // Parse the text area content into an array
-                        const newOrder = value.split('\n').map(field => field.trim()).filter(field => field.length > 0);
-                        this.plugin.settings.fieldSortOrder = newOrder;
-                        await this.plugin.saveSettings();
-                        this.plugin.app.workspace.updateOptions();
-                    });
-                text.inputEl.rows = 10;
-                text.inputEl.cols = 30;
-            });
-            
-        // --- NEW: Setting to customize which fields are removed ---
-        new Setting(containerEl)
-            .setName('Fields to Remove')
-            .setDesc('List the BibTeX fields you want to remove from the rendering. One field name per line.')
-            .addTextArea(text => {
-                text
-                    .setValue(this.plugin.settings.fieldsToRemove.join('\n'))
-                    .onChange(async (value) => {
-                        const newFieldsToRemove = value.split('\n').map(field => field.trim()).filter(field => field.length > 0);
-                        this.plugin.settings.fieldsToRemove = newFieldsToRemove;
-                        await this.plugin.saveSettings();
-                        this.plugin.app.workspace.updateOptions();
-                    });
-                text.inputEl.rows = 6;
-                text.inputEl.cols = 30;
-            });
         
         // A read-only text field to show the user which file is currently active.
         new Setting(containerEl)
@@ -443,6 +408,41 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
                     };
                     fileInput.click();
                 }));
+        
+        // --- NEW: Setting to customize field sort order ---
+        new Setting(containerEl)
+            .setName('Field Sort Order')
+            .setDesc('List the BibTeX fields in the order you want them to be rendered. One field name per line.')
+            .addTextArea(text => {
+                text
+                    .setValue(this.plugin.settings.fieldSortOrder.join('\n'))
+                    .onChange(async (value) => {
+                        // Parse the text area content into an array
+                        const newOrder = value.split('\n').map(field => field.trim()).filter(field => field.length > 0);
+                        this.plugin.settings.fieldSortOrder = newOrder;
+                        await this.plugin.saveSettings();
+                        this.plugin.app.workspace.updateOptions();
+                    });
+                text.inputEl.rows = 10;
+                text.inputEl.cols = 30;
+            });
+            
+        // --- NEW: Setting to customize which fields are removed ---
+        new Setting(containerEl)
+            .setName('Fields to Remove')
+            .setDesc('List the BibTeX fields you want to remove from the rendering. One field name per line.')
+            .addTextArea(text => {
+                text
+                    .setValue(this.plugin.settings.fieldsToRemove.join('\n'))
+                    .onChange(async (value) => {
+                        const newFieldsToRemove = value.split('\n').map(field => field.trim()).filter(field => field.length > 0);
+                        this.plugin.settings.fieldsToRemove = newFieldsToRemove;
+                        await this.plugin.saveSettings();
+                        this.plugin.app.workspace.updateOptions();
+                    });
+                text.inputEl.rows = 6;
+                text.inputEl.cols = 30;
+            });
     }
 }
 
