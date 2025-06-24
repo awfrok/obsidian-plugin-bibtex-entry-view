@@ -344,7 +344,7 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
         
         // A read-only text field to show the user which file is currently active.
         new Setting(containerEl)
-            .setName('Current BibTeX File in the Vault')
+            .setName('Current .bib File in the Vault')
             .setDesc('The vault-relative path of the .bib file currently in use.')
             .addText(text => text
                 .setValue(this.plugin.settings.bibFilePath)
@@ -353,7 +353,7 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
         
         // A setting with two buttons for choosing a file.
         new Setting(containerEl)
-            .setName('Select BibTeX File')
+            .setName('Select or import a .bib File')
             .setDesc('Choose a file from your vault or import one from your computer.')
             .addButton(button => button
                 .setButtonText('Browse Vault')
@@ -369,9 +369,8 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
                     }).open();
                 }))
             .addButton(button => button
-                .setButtonText('Import External File')
+                .setButtonText('Import an External File')
                 .setTooltip('Copy a .bib file from your computer into the vault')
-                .setCta() // Makes the button more prominent
                 .onClick(() => {
                     // This creates a hidden file input element and programmatically "clicks" it
                     // to open the system's native file browser.
