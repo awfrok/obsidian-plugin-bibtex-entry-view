@@ -172,7 +172,7 @@ export default class BibtexEntryViewPlugin extends Plugin {
         try {
             const content = await this.app.vault.read(bibFile);
             this.parseBibtexContent(content);
-            new Notice(`BibtexEntryView: Loaded ${this.bibEntries.size} entries.`);
+            //new Notice(`BibtexEntryView: Loaded ${this.bibEntries.size} entries.`);
         } catch (error) {
             new Notice('BibtexEntryView: Error reading or parsing .bib file.');
             console.error('BibtexEntryView Error:', error);
@@ -291,8 +291,6 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
         const { containerEl } = this;
         containerEl.empty();
         
-        containerEl.createEl('h2', { text: 'BibTeX Entry View Settings' });
-
         new Setting(containerEl)
             .setName('Enable rendering')
             .setDesc('If disabled, bibkey code blocks will not be rendered.')
@@ -302,6 +300,8 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
                     this.plugin.settings.enableRendering = value;
                 }));
         
+        containerEl.createEl('h2', { text: 'Bib file' });
+
         new Setting(containerEl)
             .setName('Current .bib file')
             .setDesc('This is the file the plugin is currently using.')
@@ -356,6 +356,8 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
                     fileInput.click();
                 }));
         
+        containerEl.createEl('h2', { text: 'Customize rendering' });
+
         new Setting(containerEl)
             .setName('Field sort order')
             .setDesc('List BibTeX fields in the desired render order. One field per line.')
@@ -365,7 +367,7 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
                     .onChange((value) => {
                         this.plugin.settings.fieldSortOrder = value.split('\n').map(field => field.trim()).filter(Boolean);
                     });
-                text.inputEl.rows = 10;
+                text.inputEl.rows = 5;
                 text.inputEl.cols = 30;
             });
             
@@ -378,7 +380,7 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
                     .onChange((value) => {
                         this.plugin.settings.fieldsToRemove = value.split('\n').map(field => field.trim()).filter(Boolean);
                     });
-                text.inputEl.rows = 6;
+                text.inputEl.rows = 5;
                 text.inputEl.cols = 30;
             });
     }
