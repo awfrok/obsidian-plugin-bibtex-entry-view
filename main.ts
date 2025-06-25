@@ -1,4 +1,4 @@
-import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, TextComponent, TextAreaComponent } from 'obsidian';
+import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, TextComponent } from 'obsidian';
 
 // 1. SETTINGS INTERFACE
 // Defines the shape of the plugin's settings object.
