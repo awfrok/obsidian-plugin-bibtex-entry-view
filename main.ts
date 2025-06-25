@@ -339,7 +339,7 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName('Fields to display and sort')
-            .setDesc('List the fields you want to display, in the order you want them to appear. Fields not in this list will be hidden. \nNote: Author and editor have special priority. When author field is in the bibtex entry, author field is rendered in the first line. When author field is missed, editor field is rendered in the first line.')
+            .setDesc('List the fields you want to display, in the order you want them to appear. Fields not in this list will be hidden. \nNote: Author and editor fields have special priority. When author field is in the bibtex entry, author field is rendered in the first line. When author field is missed, editor field is rendered in the first line.')
             .addTextArea(text => {
                 text
                     .setValue(this.plugin.settings.fieldSortOrder.join('\n'))
