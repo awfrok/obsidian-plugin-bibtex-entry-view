@@ -6,3 +6,38 @@ available in the app when your plugin is enabled.
 If your plugin does not need CSS, delete this file.
 
 */
+
+/*
+ * Custom styles for the BibTeX Entry View plugin.
+ * Obsidian automatically loads this file.
+ */
+
+.bibkey { 
+    color: var(--text-accent); 
+    font-weight: bold; 
+}
+
+.bibtex-field-name, .bibtex-entrytype { 
+    opacity: 0.5; 
+}
+
+.bibtex-field-value { 
+    opacity: 0.65; 
+    font-weight: bold; 
+}
+
+.bibkey-invalid-key { 
+    color: var(--text-error); 
+    opacity: 0.6; 
+    text-decoration: line-through; 
+}
+
+.bibtex-file-item { 
+    cursor: pointer; 
+    padding: 8px 10px; 
+    border-radius: var(--radius-s); 
+}
+
+.bibtex-file-item:hover { 
+    background-color: var(--background-modifier-hover); 
+}
