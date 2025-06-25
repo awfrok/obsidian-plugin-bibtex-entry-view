@@ -6,8 +6,7 @@ import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, TextCompo
 interface BibtexEntryViewSettings {
     bibFilePath: string;       // Path to the selected .bib file within the vault.
     enableRendering: boolean;  // A toggle to turn the custom rendering on or off.
-    fieldSortOrder: string[];  // An array of field names, defining the custom display order.
-    fieldsToRemove: string[];  // An array of field names to be excluded from the rendering.
+    fieldSortOrder: string[];  // An array of field names, defining the custom display order. Fields not in this list will be hidden.
 }
 
 // 2. DEFAULT SETTINGS
@@ -19,9 +18,6 @@ const DEFAULT_SETTINGS: BibtexEntryViewSettings = {
         'author', 'year', 'title', 'subtitle', 'editor', 
         'booktitle', 'booksubtitle', 'edition', 'journal', 'series', 'volume',
         'number', 'pages', 'address', 'publisher'
-    ],
-    fieldsToRemove: [
-        'abstract', 'creationdate', 'modificationdate', 'citationkey', 'language', 'keywords'
     ]
 };
 
@@ -197,17 +193,12 @@ export default class BibtexEntryViewPlugin extends Plugin {
 
             // Regex to find all key = {value} or key = "value" pairs.
             const fieldRegex = /\s*(\w+)\s*=\s*({(?:[^{}]|{(?:[^{}]|{[^{}]*})*})*}|"(?:[^"\\]|\\.)*")/g;
-            const parsedFields: ParsedBibtexField[] = [];
+            const allParsedFields: ParsedBibtexField[] = [];
             let match;
-
-            const fieldsToRemoveLower = this.settings.fieldsToRemove.map(f => f.toLowerCase());
 
             while ((match = fieldRegex.exec(body)) !== null) {
                 const fieldName = match[1];
-                if (fieldsToRemoveLower.includes(fieldName.toLowerCase())) {
-                    continue; // Skip fields marked for removal.
-                }
-
+                
                 // Extract the value part (everything after the '=').
                 const valueMatch = match[0].match(/=\s*(.*)/s);
                 let fieldValuePart = valueMatch ? valueMatch[1].trim() : '';
@@ -217,44 +208,45 @@ export default class BibtexEntryViewPlugin extends Plugin {
                     fieldValuePart = fieldValuePart.slice(1, -1);
                 }
 
-                parsedFields.push({ fieldName, fieldValue: fieldValuePart });
+                allParsedFields.push({ fieldName, fieldValue: fieldValuePart });
             }
+            
+            // NEW LOGIC: Filter fields to only include those present in the sort order list.
+            const priorityOrder = this.settings.fieldSortOrder.map(f => f.toLowerCase());
+            let fieldsToDisplay = allParsedFields.filter(field => priorityOrder.includes(field.fieldName.toLowerCase()));
 
-            // --- Corrected Sorting Logic ---
+            // --- Sorting Logic ---
             let primaryField: ParsedBibtexField | undefined;
-            let remainingFields = [...parsedFields]; // Create a mutable copy.
 
-            // Find the index of the 'author' field.
-            const authorIndex = remainingFields.findIndex(f => f.fieldName.toLowerCase() === 'author');
+            // Find the index of the 'author' field within the *filtered* list.
+            const authorIndex = fieldsToDisplay.findIndex(f => f.fieldName.toLowerCase() === 'author');
             if (authorIndex !== -1) {
                 // If author exists, remove it from the list and set it as the primary field.
-                primaryField = remainingFields.splice(authorIndex, 1)[0];
+                primaryField = fieldsToDisplay.splice(authorIndex, 1)[0];
             } else {
                 // If no author, check for an 'editor' field to use as the primary instead.
-                const editorIndex = remainingFields.findIndex(f => f.fieldName.toLowerCase() === 'editor');
+                const editorIndex = fieldsToDisplay.findIndex(f => f.fieldName.toLowerCase() === 'editor');
                 if (editorIndex !== -1) {
-                    primaryField = remainingFields.splice(editorIndex, 1)[0];
+                    primaryField = fieldsToDisplay.splice(editorIndex, 1)[0];
                 }
             }
             
-            const priorityOrder = this.settings.fieldSortOrder.map(f => f.toLowerCase());
-            
             // Sort the *remaining* fields according to the user-defined priority list.
-            remainingFields.sort((a, b) => {
+            fieldsToDisplay.sort((a, b) => {
                 const fieldNameA = a.fieldName.toLowerCase();
                 const fieldNameB = b.fieldName.toLowerCase();
                 
                 const sortIndexA = priorityOrder.indexOf(fieldNameA);
                 const sortIndexB = priorityOrder.indexOf(fieldNameB);
 
-                if (sortIndexA !== -1 && sortIndexB !== -1) return sortIndexA - sortIndexB; // Both in list, sort by index.
-                if (sortIndexA !== -1) return -1; // Only A is in list, it comes first.
-                if (sortIndexB !== -1) return 1;  // Only B is in list, it comes first.
-                return fieldNameA.localeCompare(fieldNameB); // Neither in list, sort alphabetically.
+                // Since all fields are guaranteed to be in the priorityOrder, we can just compare their indices.
+                // A check for -1 is not strictly necessary here but is good practice.
+                if (sortIndexA !== -1 && sortIndexB !== -1) return sortIndexA - sortIndexB;
+                return 0; // Should not be reached if filtering is correct.
             });
             
             // Reconstruct the final list, adding the primary field back to the start.
-            const sortedFields = primaryField ? [primaryField, ...remainingFields] : remainingFields;
+            const sortedFields = primaryField ? [primaryField, ...fieldsToDisplay] : fieldsToDisplay;
 
             return { entryType, bibkey, fields: sortedFields };
         } catch (error) {
@@ -304,7 +296,7 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
             .setDesc('Choose a file from your vault or import one from your computer.')
             .addButton(button => button
                 .setButtonText('Select from vault')
-                .setTooltip('Select a .bib file already in your vault')
+                .setTooltip('Select a .bib file in your vault')
                 .onClick(() => {
                     new BibFileSelectionModal(this.app, (selectedPath) => {
                         this.plugin.settings.bibFilePath = selectedPath;
@@ -346,8 +338,8 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
         containerEl.createEl('h2', { text: 'Customize rendering' });
 
         new Setting(containerEl)
-            .setName('Field sort order')
-            .setDesc('List BibTeX fields in the desired render order. One field per line.')
+            .setName('Fields to display and sort')
+            .setDesc('List the fields you want to display, in the order you want them to appear. Fields not in this list will be hidden. \nNote: Author and editor have special priority. When author field is in the bibtex entry, author field is rendered in the first line. When author field is missed, editor field is rendered in the first line.')
             .addTextArea(text => {
                 text
                     .setValue(this.plugin.settings.fieldSortOrder.join('\n'))
@@ -356,19 +348,6 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
                         this.plugin.settings.fieldSortOrder = value.split('\n').map(field => field.trim()).filter(Boolean);
                     });
                 text.inputEl.rows = 10;
-                text.inputEl.cols = 30;
-            });
-            
-        new Setting(containerEl)
-            .setName('Fields to remove')
-            .setDesc('List BibTeX fields to exclude from rendering. One field per line.')
-            .addTextArea(text => {
-                text
-                    .setValue(this.plugin.settings.fieldsToRemove.join('\n'))
-                    .onChange((value) => {
-                        this.plugin.settings.fieldsToRemove = value.split('\n').map(field => field.trim()).filter(Boolean);
-                    });
-                text.inputEl.rows = 6;
                 text.inputEl.cols = 30;
             });
     }
