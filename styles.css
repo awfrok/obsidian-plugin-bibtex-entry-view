@@ -1,6 +1,7 @@
 .bibkey { 
     color: var(--text-accent); 
-    font-weight: bold; 
+    /* font-weight: bold; */ 
+    opacity: 0.65;
 }
 
 .bibtex-field-name, .bibtex-entrytype { 
