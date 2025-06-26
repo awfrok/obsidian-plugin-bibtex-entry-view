@@ -15,7 +15,7 @@ const DEFAULT_SETTINGS: BibtexEntryViewSettings = {
     bibFilePath: '',
     enableRendering: true,
     fieldSortOrder: [
-        'author', 'year', 'title', 'subtitle', 'editor', 
+        'author', 'year', 'entrytype', 'title', 'subtitle', 'editor', 
         'booktitle', 'booksubtitle', 'edition', 'journal', 'series', 'volume',
         'number', 'pages', 'address', 'publisher'
     ]
@@ -153,7 +153,7 @@ export default class BibtexEntryViewPlugin extends Plugin {
 
         try {
             const content = await this.app.vault.read(bibFile);
-            this.parseBibtexContent(content);
+            this.parseBibtexEntry(content);
             // new Notice(`BibtexEntryView: Loaded ${this.bibEntries.size} entries.`);
         } catch (error) {
             new Notice('BibtexEntryView: Error reading or parsing .bib file.');
@@ -162,7 +162,7 @@ export default class BibtexEntryViewPlugin extends Plugin {
     }
     
     // Parses the string content of a .bib file into the in-memory map.
-    private parseBibtexContent(content: string) {
+    private parseBibtexEntry(content: string) {
         // This regex robustly finds BibTeX entries, handling nested braces correctly.
         const entryRegex = /@\w+\s*\{[^,]+,(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*?\s*\}/gs;
         const entries = content.match(entryRegex);
@@ -210,6 +210,9 @@ export default class BibtexEntryViewPlugin extends Plugin {
 
                 allParsedFields.push({ fieldName, fieldValue: fieldValuePart });
             }
+            
+            // Add the entryType as a pseudo-field so it can be sorted and displayed.
+            allParsedFields.push({ fieldName: 'entrytype', fieldValue: entryType });
             
             // NEW LOGIC: Filter fields to only include those present in the sort order list.
             const priorityOrder = this.settings.fieldSortOrder.map(f => f.toLowerCase());
@@ -305,7 +308,7 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
                 }))
             .addButton(button => button
                 .setButtonText('Import to vault')
-                .setTooltip('This will overwrite any file with the same name in the vault.')
+                .setTooltip('Beware: This will overwrite any file with the same name in the vault.')
                 .onClick(() => {
                     // Create a temporary file input element to open the system file picker.
                     const fileInput = document.createElement('input');
