@@ -23,7 +23,7 @@ const DEFAULT_SETTINGS: BibtexEntryViewSettings = {
 
 // --- DATA STRUCTURE INTERFACES ---
 // Defines the structure for a single, parsed field from a BibTeX entry.
-interface ParsedBibtexField {
+interface FieldNameAndValue {
     fieldName: string; // The name of the field (e.g., "author"), preserving its original casing.
     fieldValue: string; // The raw value of the field, with outer delimiters removed.
 }
@@ -32,7 +32,7 @@ interface ParsedBibtexField {
 interface FormattedBibtexEntry {
     entryType: string;         // The type of the entry (e.g., "article", "book").
     bibkey: string;            // The unique citation key (e.g., "doe2021").
-    fields: ParsedBibtexField[]; // An array of the entry's fields, sorted and filtered.
+    fields: FieldNameAndValue[]; // An array of the entry's fields, sorted and filtered.
 }
 
 // 3. MAIN PLUGIN CLASS
@@ -193,7 +193,7 @@ export default class BibtexEntryViewPlugin extends Plugin {
 
             // Regex to find all key = {value} or key = "value" pairs.
             const fieldRegex = /\s*(\w+)\s*=\s*({(?:[^{}]|{(?:[^{}]|{[^{}]*})*})*}|"(?:[^"\\]|\\.)*")/g;
-            const allParsedFields: ParsedBibtexField[] = [];
+            const allParsedFields: FieldNameAndValue[] = [];
             let match;
 
             while ((match = fieldRegex.exec(body)) !== null) {
@@ -216,26 +216,26 @@ export default class BibtexEntryViewPlugin extends Plugin {
             
             // NEW LOGIC: Filter fields to only include those present in the sort order list.
             const priorityOrder = this.settings.fieldSortOrder.map(f => f.toLowerCase());
-            let fieldsToDisplay = allParsedFields.filter(field => priorityOrder.includes(field.fieldName.toLowerCase()));
+            let fieldsToRender = allParsedFields.filter(field => priorityOrder.includes(field.fieldName.toLowerCase()));
 
             // --- Sorting Logic ---
-            let primaryField: ParsedBibtexField | undefined;
+            let primaryField: FieldNameAndValue | undefined;
 
             // Find the index of the 'author' field within the *filtered* list.
-            const authorIndex = fieldsToDisplay.findIndex(f => f.fieldName.toLowerCase() === 'author');
+            const authorIndex = fieldsToRender.findIndex(f => f.fieldName.toLowerCase() === 'author');
             if (authorIndex !== -1) {
                 // If author exists, remove it from the list and set it as the primary field.
-                primaryField = fieldsToDisplay.splice(authorIndex, 1)[0];
+                primaryField = fieldsToRender.splice(authorIndex, 1)[0];
             } else {
                 // If no author, check for an 'editor' field to use as the primary instead.
-                const editorIndex = fieldsToDisplay.findIndex(f => f.fieldName.toLowerCase() === 'editor');
+                const editorIndex = fieldsToRender.findIndex(f => f.fieldName.toLowerCase() === 'editor');
                 if (editorIndex !== -1) {
-                    primaryField = fieldsToDisplay.splice(editorIndex, 1)[0];
+                    primaryField = fieldsToRender.splice(editorIndex, 1)[0];
                 }
             }
             
             // Sort the *remaining* fields according to the user-defined priority list.
-            fieldsToDisplay.sort((a, b) => {
+            fieldsToRender.sort((a, b) => {
                 const fieldNameA = a.fieldName.toLowerCase();
                 const fieldNameB = b.fieldName.toLowerCase();
                 
@@ -249,7 +249,7 @@ export default class BibtexEntryViewPlugin extends Plugin {
             });
             
             // Reconstruct the final list, adding the primary field back to the start.
-            const sortedFields = primaryField ? [primaryField, ...fieldsToDisplay] : fieldsToDisplay;
+            const sortedFields = primaryField ? [primaryField, ...fieldsToRender] : fieldsToRender;
 
             return { entryType, bibkey, fields: sortedFields };
         } catch (error) {
