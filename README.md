@@ -79,7 +79,7 @@
 {bibkey}
 ```
 ````
-- Suggested list will be shown while typing `{bibkey}` as follows.
+- Suggested list will be shown while typing `{bibkey}` as follows. (v. 0.2.0)
   - The keywords for suggestion should be part of `bibkey`, `author`, `editor`, `year`, `title`, `subtitle`, `booktitel`, `booksubtitle`.
 
 ![suggestion-article.png](suggestion-article.png)
