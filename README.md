@@ -91,6 +91,10 @@
 - immediate rendering triggered on the option change.
 - adding a command to manually update the entry indicies when updating the target `.bib` file of the symbolic link.
 
+## support
+
+- If you like this plugin, please consider to support. https://ko-fi.com/kydem
+
 ## license
 
 MIT
