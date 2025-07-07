@@ -93,7 +93,7 @@
 
 ## support
 
-- If you like this plugin, please consider to support. 
+- If you like this project, please support. 
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/O5O41HNOCV)
 
