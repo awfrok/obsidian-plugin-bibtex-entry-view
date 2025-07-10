@@ -46,7 +46,6 @@
   - If the bibtexentry does not have an author field but a editor field, it shows the editor field and its value right after the `bibkey`.
 - In the third line and so on,
   - it sorts all the other fields and their values by the order of `settings` and shows them.
-  - In this step, it hides a few fields and their values that are chosen in `settings`.
 
 ## so, how a user can use it
 
