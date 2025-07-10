@@ -82,7 +82,7 @@
 ````
 
 - Suggested list will be shown while typing `{bibkey}` as follows. (v. 0.2.0)
-  - The keywords for suggestion should be part of `fields to display and sort` in the `settings`. (v. 0.2.1)
+  - The keywords for suggestion should be partial value of any `fields to display and sort` in the `settings`. (v. 0.2.1)
 
 ![suggestion-article.png](suggestion-article.png)
 ![suggestion-book.png](suggestion-book.png)
