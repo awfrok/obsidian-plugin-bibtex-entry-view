@@ -86,7 +86,7 @@
 ![suggestion-article.png](suggestion-article.png)
 ![suggestion-book.png](suggestion-book.png)
 
-## known bugs or malfunctioning
+## known bug or malfunctioning
 
 - It seems that the plugin does not show suggestions irregularly when using a plugin `Various Complements`. Looking into this problem. (@ v. 0.2.0)
 
