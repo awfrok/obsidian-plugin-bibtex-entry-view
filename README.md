@@ -87,7 +87,7 @@
 
 ## known bugs or malfunctioning
 
-- It seems that the plugin does not show suggestions irregularly when using a plugin `Various Complements`. Looking into this problem. (@ v 0.2.0)
+- It seems that the plugin does not show suggestions irregularly when using a plugin `Various Complements`. Looking into this problem. (@ v. 0.2.0)
 
 ## what is planned to add next
 
