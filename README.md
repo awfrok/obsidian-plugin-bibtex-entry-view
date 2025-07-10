@@ -42,10 +42,10 @@
 - In the first line,
   - it shows the `bibkey` in the accent color of obsidian.
 - In the second line,
-  - If the bibtexentry has an author field, it shows the author field and its value right after the `bibkey`.
-  - If the bibtexentry does not have an author field but a editor field, it shows the editor field and its value right after the `bibkey`.
+  - If the bibtexentry has `author` field, it shows the author field name and its value right after the `bibkey`.
+  - If the bibtexentry does not have `author` field but an `editor` field, it shows the editor field name and its value right after the `bibkey`.
 - In the third line and so on,
-  - it sorts all the other fields and their values by the order of `settings` and shows them.
+  - it sorts all the other field names and their values by the order of `fields to display and sort` in the `settings` and shows them.
 
 ## so, how a user can use it
 
