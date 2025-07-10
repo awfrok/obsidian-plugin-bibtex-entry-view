@@ -13,7 +13,8 @@ const DEFAULT_SETTINGS: BibtexEntryViewSettings = {
     bibFilePath: '',
     fieldSortOrder: [
         'author', 'year', 'entrytype', 'title', 'subtitle', 'editor', 
-        'booktitle', 'booksubtitle', 'edition', 'journal', 'series', 'volume',
+        'booktitle', 'booksubtitle', 'maintitle', 'mainsubtitle', 
+        'edition', 'journal', 'series', 'volume',
         'number', 'pages', 'address', 'publisher'
     ]
 };
@@ -245,7 +246,7 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
         
         new Setting(containerEl)
             .setName('Select or import a .bib file')
-            .setDesc('Choose a file from your vault or import one from your computer.')
+            .setDesc('Choose a file from your vault or import one from your computer. • Beware: Importing a file will overwrite the file of same name in the vault.')
             .addButton(button => button
                 .setButtonText('Select from vault')
                 .setTooltip('Select a .bib file in your vault')
@@ -257,7 +258,7 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
                 }))
             .addButton(button => button
                 .setButtonText('Import to vault')
-                .setTooltip('Beware: This will overwrite any file with the same name in the vault.')
+                .setTooltip('Beware: Importing a file will overwrite the file of same name in the vault.')
                 .onClick(() => {
                     const fileInput = document.createElement('input');
                     fileInput.type = 'file';
@@ -424,16 +425,17 @@ class BibkeySuggester extends EditorSuggest<FormattedBibtexEntry> {
             if (!entry) continue;
 
             // 2. Create a single, lowercase, searchable string for the entire entry.
-            const searchableText = [
-                entry.bibkey,
-                entry.fields.find(f => f.fieldName.toLowerCase() === 'author')?.fieldValue || '',
-                entry.fields.find(f => f.fieldName.toLowerCase() === 'editor')?.fieldValue || '',
-                entry.fields.find(f => f.fieldName.toLowerCase() === 'year')?.fieldValue || '',
-                entry.fields.find(f => f.fieldName.toLowerCase() === 'title')?.fieldValue || '',
-                entry.fields.find(f => f.fieldName.toLowerCase() === 'subtitle')?.fieldValue || '',
-                entry.fields.find(f => f.fieldName.toLowerCase() === 'booktitle')?.fieldValue || '',
-                entry.fields.find(f => f.fieldName.toLowerCase() === 'booksubtitle')?.fieldValue || ''
-            ].join(' ').toLowerCase();
+            //    This now dynamically includes the bibkey and all fields from the user's sort order settings.
+            const textParts = [entry.bibkey];
+            const fieldsToSearch = this.plugin.settings.fieldSortOrder.map(f => f.toLowerCase());
+            
+            entry.fields.forEach(field => {
+                if (fieldsToSearch.includes(field.fieldName.toLowerCase())) {
+                    textParts.push(field.fieldValue);
+                }
+            });
+            
+            const searchableText = textParts.join(' ').toLowerCase();
             
             // 3. Split the entry's text into individual words, handling various punctuation.
             const entryWords = searchableText.split(/[\s,.:;!?()"]+/).filter(w => w.length > 0);
