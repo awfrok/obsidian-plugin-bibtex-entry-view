@@ -92,7 +92,6 @@
 
 ## what is planned to add next
 
-- rendering `author` or `editor` field by the order of last, first, and middle.
 - immediate rendering triggered on the option change.
 - adding a command to manually update the entry indicies when updating the target `.bib` file of the symbolic link.
 
