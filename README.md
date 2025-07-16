@@ -95,6 +95,7 @@
 
 - immediate rendering triggered on the option change.
 - adding a command to manually update the entry indicies when updating the target `.bib` file of the symbolic link.
+- fuzzy search for autocompletion suggestion
 
 ## support
 
