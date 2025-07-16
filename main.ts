@@ -54,6 +54,31 @@ const PLUGIN_CONSTANTS = {
     }
 } as const;
 
+// --- HELPER FUNCTIONS ---
+/**
+ * Converts a string to title case, leaving small words lowercase.
+ * @param str The string to convert.
+ * @returns The title-cased string.
+ */
+function toTitleCase(str: string): string {
+    if (!str) return '';
+    // This regex matches small, lowercase words that shouldn't be capitalized in the middle of a title.
+    const smallWords = /^(a|an|and|as|at|but|by|en|for|if|in|nor|of|on|or|per|the|to|vs?\.?|via)$/i;
+    
+    return str.toLowerCase().split(' ').map((word, index, array) => {
+        // Always capitalize the first word, or words that follow punctuation.
+        if (index === 0) {
+            return word.charAt(0).toUpperCase() + word.slice(1);
+        }
+        // Don't capitalize small words in the middle.
+        if (smallWords.test(word)) {
+            return word;
+        }
+        // Capitalize all other words.
+        return word.charAt(0).toUpperCase() + word.slice(1);
+    }).join(' ');
+}
+
 // --- DATA STRUCTURE INTERFACES ---
 interface FieldNameAndValue {
     fieldName: string;
@@ -125,7 +150,22 @@ export default class BibtexEntryViewPlugin extends Plugin {
                         entryCode.appendText('\n');
                         entryCode.createEl('span', { text: field.fieldName, cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_FIELD_NAME });
                         entryCode.createEl('span', { text: ': ', cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_FIELD_NAME });
-                        entryCode.createEl('span',{ text: field.fieldValue, cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_FIELD_VALUE } )
+                        
+                        // Handle author/editor fields specially to style "and"
+                        const fieldNameLower = field.fieldName.toLowerCase();
+                        if (fieldNameLower === 'author' || fieldNameLower === 'editor') {
+                            const creators = field.fieldValue.split(' and ');
+                            creators.forEach((creator, index) => {
+                                entryCode.createEl('span', { text: creator, cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_FIELD_VALUE });
+                                if (index < creators.length - 1) {
+                                    // Add ' and ' with the field name class
+                                    entryCode.createEl('span', { text: ' and ', cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_FIELD_NAME });
+                                }
+                            });
+                        } else {
+                            // Default behavior for all other fields
+                            entryCode.createEl('span',{ text: field.fieldValue, cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_FIELD_VALUE } )
+                        }
                     });
                 } else {
                     // This handles keys that are provided but not found in the .bib file.
@@ -211,11 +251,17 @@ export default class BibtexEntryViewPlugin extends Plugin {
                 // Convert library's fields object to our FieldNameAndValue array, handling different value types
                 const allParsedFields: FieldNameAndValue[] = Object.entries(entry.fields).map(([fieldName, value]) => {
                     let fieldValue: string;
+                    const lowerFieldName = fieldName.toLowerCase();
 
+                    // First, determine the base string value for the field
                     if (Array.isArray(value)) {
-                        // Check if it's an array of Creators (authors/editors) by looking for a 'lastName' property
-                        if (value.length > 0 && typeof value[0] === 'object' && value[0] !== null && 'lastName' in value[0]) {
-                            fieldValue = (value as Creator[]).map(creator => `${creator.firstName || ''} ${creator.lastName}`.trim()).join(' and ');
+                        // Check if it's an array of Creators (authors/editors)
+                        if (value.length > 0 && typeof value[0] === 'object' && value[0] !== null && ('lastName' in value[0] || 'firstName' in value[0] || 'name' in value[0])) {
+                            fieldValue = (value as Creator[]).map(creator => {
+                                if (creator.name) return creator.name;
+                                if (creator.lastName && creator.firstName) return `${creator.lastName}, ${creator.firstName}`;
+                                return creator.lastName || creator.firstName || '';
+                            }).join(' and ');
                         } else {
                             // It's an array of strings
                             fieldValue = (value as string[]).join(' ');
@@ -225,8 +271,14 @@ export default class BibtexEntryViewPlugin extends Plugin {
                         fieldValue = value as string;
                     }
 
+                    // Second, apply title casing if the field is a title/subtitle
+                    const titleFields = ['title', 'subtitle', 'booktitle', 'booksubtitle', 'maintitle', 'mainsubtitle'];
+                    if (titleFields.includes(lowerFieldName)) {
+                        fieldValue = toTitleCase(fieldValue);
+                    }
+
                     return {
-                        fieldName: fieldName.toLowerCase(),
+                        fieldName: lowerFieldName,
                         fieldValue: fieldValue
                     };
                 });
