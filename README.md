@@ -44,6 +44,7 @@
 - In the second line,
   - If the bibtexentry has `author` field, it shows the author field name and its value right after the `bibkey`.
   - If the bibtexentry does not have `author` field but an `editor` field, it shows the editor field name and its value right after the `bibkey`.
+  - All kinds of name are in "last, first ..." format. (v. 0.2.2)
 - In the third line and so on,
   - it sorts all the other field names and their values by the order of `fields to display and sort` in the `settings` and shows them.
 
@@ -82,7 +83,6 @@
 
 - Suggested list will be shown while typing `{bibkey}` as follows. (v. 0.2.0)
   - The keywords for suggestion should be partial value of any `fields to display and sort` in the `settings`. (v. 0.2.1)
-  - All kinds of name are in "last, first ..." format. (v. 0.2.2)
 
 ![suggestion-article.png](suggestion-article.png)
 ![suggestion-book.png](suggestion-book.png)
