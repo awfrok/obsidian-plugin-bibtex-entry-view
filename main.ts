@@ -2,14 +2,18 @@ import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, TextCompo
 import { parse as bibtexParse, Creator } from '@retorquere/bibtex-parser';
 
 // 1. SETTINGS INTERFACE
-// Defines the shape of the plugin's settings object.
+/**
+ * Defines the shape of the plugin's settings object, which is saved to and loaded from disk.
+ */
 interface BibtexEntryViewSettings {
     bibFilePath: string;      // Path to the selected .bib file within the vault.
     fieldSortOrder: string[]; // An array of field names, defining the custom display order.
 }
 
 // 2. DEFAULT SETTINGS
-// Provides a fallback configuration for when the plugin is first installed.
+/**
+ * Provides a fallback configuration for when the plugin is first installed or settings are cleared.
+ */
 const DEFAULT_SETTINGS: BibtexEntryViewSettings = {
     bibFilePath: '',
     fieldSortOrder: [
@@ -22,7 +26,9 @@ const DEFAULT_SETTINGS: BibtexEntryViewSettings = {
 
 
 // --- CONSTANTS ---
-// Centralizes all hardcoded strings and numbers for easier maintenance.
+/**
+ * Centralizes all hardcoded strings and numbers for easier maintenance and consistency.
+ */
 const PLUGIN_CONSTANTS = {
     BIBKEY_CODE_BLOCK: 'bibkey',
     SINGLE_LINE_PREFIX: '```bibkey ',
@@ -54,6 +60,509 @@ const PLUGIN_CONSTANTS = {
     }
 } as const;
 
+// --- DATA STRUCTURE INTERFACES ---
+/**
+ * Represents a single field-value pair from a BibTeX entry.
+ */
+interface FieldNameAndValue {
+    fieldName: string;
+    fieldValue: string;
+}
+
+/**
+ * Represents a fully parsed and formatted BibTeX entry, ready for display.
+ */
+interface FormattedBibtexEntry {
+    entryType: string;
+    bibkey: string;
+    fields: FieldNameAndValue[];
+}
+
+/**
+ * Represents a cached entry, containing both the display-ready data and the text used for searching.
+ * This pre-processing is key to the suggester's performance.
+ */
+interface CachedBibEntry {
+    formattedEntry: FormattedBibtexEntry;
+    searchableText: string;
+}
+
+// 3. MAIN PLUGIN CLASS
+/**
+ * The main class for the BibtexEntryView plugin. It manages settings, data loading,
+ * and the registration of all plugin components like code block processors and suggesters.
+ */
+export default class BibtexEntryViewPlugin extends Plugin {
+    settings: BibtexEntryViewSettings;
+    // An in-memory cache that stores pre-processed BibTeX entries for fast lookups.
+    bibCache: Map<string, CachedBibEntry> = new Map();
+
+    /**
+     * This method is called when the plugin is first loaded.
+     * It's responsible for setting up all the plugin's functionality.
+     */
+    async onload() {
+        // Load existing settings from disk, or use defaults.
+        await this.loadSettings();
+        
+        // Add the settings tab to Obsidian's settings screen.
+        this.addSettingTab(new BibtexEntryViewSettingTab(this.app, this));
+
+        // Register the autocomplete suggester to help users find bibkeys.
+        this.registerEditorSuggest(new BibkeySuggester(this.app, this));
+
+        // Register an event listener that reloads the .bib file if it's modified.
+        this.registerEvent(this.app.vault.on('modify', async (file) => {
+            if (file.path === this.settings.bibFilePath) {
+                await this.loadBibFile();
+                this.app.workspace.updateOptions(); // Force Obsidian to re-render views
+            }
+        }));
+
+        // When the Obsidian workspace is ready, load the data and register the code block processor.
+        this.app.workspace.onLayoutReady(async () => {
+            await this.loadBibFile();
+
+            // Register the processor for `bibkey` code blocks.
+            this.registerMarkdownCodeBlockProcessor(PLUGIN_CONSTANTS.BIBKEY_CODE_BLOCK, (source, element, context) => {
+                const bibkey = source.trim();
+                element.empty(); // Clear any previous content.
+
+                // Handle empty code blocks.
+                if (!bibkey) {
+                    const entryPre = element.createEl('pre');
+                    const entryCode = entryPre.createEl('code', { cls: `${PLUGIN_CONSTANTS.CSS_CLASSES.CSS_BIBTEX_ENTRY} ${PLUGIN_CONSTANTS.CSS_CLASSES.CSS_BIBTEX_ERROR}` });
+                    entryCode.createEl('span', {
+                        text: PLUGIN_CONSTANTS.EMPTY_KEY_MSG,
+                        cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_INVALID_KEY
+                    });
+                    return;
+                }
+
+                // Look up the entry in our fast cache.
+                const cachedEntry = this.bibCache.get(bibkey);
+
+                if (cachedEntry) {
+                    // --- Render a valid, found entry ---
+                    const parsedEntry = cachedEntry.formattedEntry;
+                    const entryPre = element.createEl('pre');
+                    const entryCode = entryPre.createEl('code', { cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_BIBTEX_ENTRY });
+                    
+                    entryCode.createEl('span', { text: parsedEntry.bibkey, cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_BIBKEY });
+                    
+                    parsedEntry.fields.forEach((field) => {
+                        entryCode.appendText('\n');
+                        entryCode.createEl('span', { text: field.fieldName, cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_FIELD_NAME });
+                        entryCode.createEl('span', { text: ': ', cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_FIELD_NAME });
+                        
+                        // Special handling for author/editor fields to style the "and" separator.
+                        const fieldNameLower = field.fieldName.toLowerCase();
+                        if (fieldNameLower === 'author' || fieldNameLower === 'editor') {
+                            const creators = field.fieldValue.split(' and ');
+                            creators.forEach((creator, index) => {
+                                entryCode.createEl('span', { text: creator, cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_FIELD_VALUE });
+                                if (index < creators.length - 1) {
+                                    entryCode.createEl('span', { text: ' and ', cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_FIELD_NAME });
+                                }
+                            });
+                        } else {
+                            // Default rendering for all other fields.
+                            entryCode.createEl('span',{ text: field.fieldValue, cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_FIELD_VALUE } )
+                        }
+                    });
+                } else {
+                    // --- Render an error for an invalid/not-found key ---
+                    const entryPre = element.createEl('pre');
+                    const entryCode = entryPre.createEl('code', { cls: `${PLUGIN_CONSTANTS.CSS_CLASSES.CSS_BIBTEX_ENTRY} ${PLUGIN_CONSTANTS.CSS_CLASSES.CSS_BIBTEX_ERROR}` });
+                    entryCode.createEl('span', { text: bibkey, cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_INVALID_KEY });
+                    entryCode.appendText(' ');
+                    entryCode.createEl('span', { text: PLUGIN_CONSTANTS.EMPTY_KEY_MSG, cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_INVALID_KEY });
+                }
+            });
+
+            // Force a re-render of the workspace to show the processed blocks.
+            this.app.workspace.updateOptions();
+        });
+    }
+
+    /**
+     * This method is called when the plugin is unloaded.
+     * It's responsible for cleaning up any resources.
+     */
+    onunload() {
+        this.bibCache.clear();
+    }
+
+    /**
+     * Loads the plugin settings from Obsidian's data store.
+     */
+    async loadSettings() {
+        this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    }
+
+    /**
+     * Saves the current plugin settings to disk and reloads the .bib file to apply changes.
+     */
+    async saveSettings() {
+        await this.saveData(this.settings);
+        await this.loadBibFile();
+        this.app.workspace.updateOptions(); // Re-render views with new settings
+    }
+    
+    /**
+     * Reads the .bib file specified in the settings and triggers the parsing and caching process.
+     */
+    async loadBibFile() {
+        this.bibCache.clear();
+        const { bibFilePath } = this.settings;
+
+        if (!bibFilePath) return;
+
+        const bibFile = this.app.vault.getAbstractFileByPath(bibFilePath);
+
+        if (!(bibFile instanceof TFile)) {
+            new Notice(PLUGIN_CONSTANTS.FILE_NOT_FOUND_MSG(bibFilePath));
+            return;
+        }
+
+        try {
+            const content = await this.app.vault.read(bibFile);
+            this.parseAndCacheBibtex(content);
+        } catch (error) {
+            new Notice(PLUGIN_CONSTANTS.PARSE_ERROR_MSG);
+            console.error('BibtexEntryView Error:', error);
+        }
+    }
+    
+    /**
+     * Parses the raw content of a .bib file, formats the entries, and stores them in the cache.
+     * This is the core data processing step.
+     * @param content The raw string content of the .bib file.
+     */
+    private parseAndCacheBibtex(content: string) {
+        try {
+            this.bibCache.clear();
+            // Use the robust @retorquere/bibtex-parser library.
+            const bibtex = bibtexParse(content);
+
+            // Log any parsing errors to the developer console for debugging.
+            for (const error of bibtex.errors) {
+                console.warn("Bibtex-parser error:", error);
+            }
+
+            for (const entry of bibtex.entries) {
+                if (!entry.key) continue; // Skip entries that lack a citation key.
+
+                const bibkey = entry.key;
+                const entryType = entry.type;
+                
+                // Convert the parser's output into our internal FieldNameAndValue format.
+                const allParsedFields: FieldNameAndValue[] = Object.entries(entry.fields).map(([fieldName, value]) => {
+                    let fieldValue: string;
+                    const lowerFieldName = fieldName.toLowerCase();
+
+                    // Convert the field's value (which can be a string or array) into a single string.
+                    if (Array.isArray(value)) {
+                        // Handle Creator arrays (authors/editors) by formatting names.
+                        if (value.length > 0 && typeof value[0] === 'object' && value[0] !== null && ('lastName' in value[0] || 'firstName' in value[0] || 'name' in value[0])) {
+                            fieldValue = (value as Creator[]).map(creator => {
+                                if (creator.name) return creator.name; // For institutional authors
+                                if (creator.lastName && creator.firstName) return `${creator.lastName}, ${creator.firstName}`;
+                                return creator.lastName || creator.firstName || ''; // Fallback
+                            }).join(' and ');
+                        } else {
+                            // Handle simple string arrays.
+                            fieldValue = (value as string[]).join(' ');
+                        }
+                    } else {
+                        // Handle plain string values.
+                        fieldValue = value as string;
+                    }
+
+                    // Apply title case formatting to all title-related fields.
+                    const titleFields = ['title', 'subtitle', 'booktitle', 'booksubtitle', 'maintitle', 'mainsubtitle'];
+                    if (titleFields.includes(lowerFieldName)) {
+                        fieldValue = toTitleCase(fieldValue);
+                    }
+
+                    return {
+                        fieldName: lowerFieldName,
+                        fieldValue: fieldValue
+                    };
+                });
+                
+                // Apply the user's custom field sorting.
+                const formattedEntry = this.formatAndSortBibtexFields({ entryType, bibkey, fields: allParsedFields });
+
+                // --- Pre-computation for Search ---
+                // Create a single, searchable string from the most important fields.
+                const textParts = [formattedEntry.bibkey];
+                const fieldsToSearch = this.settings.fieldSortOrder.map(f => f.toLowerCase());
+                formattedEntry.fields.forEach(field => {
+                    if (fieldsToSearch.includes(field.fieldName.toLowerCase())) {
+                        textParts.push(field.fieldValue);
+                    }
+                });
+                const searchableText = textParts.join(' ').toLowerCase();
+                
+                // Add the fully processed entry to the cache.
+                this.bibCache.set(bibkey, {
+                    formattedEntry,
+                    searchableText
+                });
+            }
+        } catch (error) {
+            new Notice(PLUGIN_CONSTANTS.PARSE_ERROR_MSG);
+            console.error('BibtexEntryView: Error parsing .bib file with library', error);
+        }
+    }
+
+    /**
+     * Sorts the fields of a parsed BibTeX entry according to the user's preferences.
+     * @param input An object containing the pre-parsed entry data.
+     * @returns A FormattedBibtexEntry with fields in the correct display order.
+     */
+    formatAndSortBibtexFields(input: { entryType: string, bibkey: string, fields: FieldNameAndValue[] }): FormattedBibtexEntry {
+        const { entryType, bibkey, fields } = input;
+        
+        const allParsedFields = [...fields];
+        allParsedFields.push({ fieldName: 'entrytype', fieldValue: entryType });
+        
+        // Filter fields to only those the user wants to display.
+        const priorityOrder = this.settings.fieldSortOrder.map(f => f.toLowerCase());
+        let fieldsToRender = allParsedFields.filter(field => priorityOrder.includes(field.fieldName.toLowerCase()));
+
+        // Give special priority to 'author' or 'editor' by moving it to the top.
+        let primaryField: FieldNameAndValue | undefined;
+        const authorIndex = fieldsToRender.findIndex(f => f.fieldName.toLowerCase() === 'author');
+        if (authorIndex !== -1) {
+            primaryField = fieldsToRender.splice(authorIndex, 1)[0];
+        } else {
+            const editorIndex = fieldsToRender.findIndex(f => f.fieldName.toLowerCase() === 'editor');
+            if (editorIndex !== -1) {
+                primaryField = fieldsToRender.splice(editorIndex, 1)[0];
+            }
+        }
+        
+        // Sort the remaining fields based on the user's custom order.
+        fieldsToRender.sort((a, b) => {
+            const indexA = priorityOrder.indexOf(a.fieldName.toLowerCase());
+            const indexB = priorityOrder.indexOf(b.fieldName.toLowerCase());
+            return indexA - indexB;
+        });
+        
+        const sortedFields = primaryField ? [primaryField, ...fieldsToRender] : fieldsToRender;
+
+        return { entryType, bibkey, fields: sortedFields };
+    }
+}
+
+// 4. AUTOCOMPLETE SUGGESTER CLASS
+/**
+ * Provides an autocomplete dropdown menu for bibkeys inside a `bibkey` code block.
+ */
+class BibkeySuggester extends EditorSuggest<FormattedBibtexEntry> {
+    plugin: BibtexEntryViewPlugin;
+
+    constructor(app: App, plugin: BibtexEntryViewPlugin) {
+        super(app);
+        this.plugin = plugin;
+    }
+
+    /**
+     * Determines if the suggestion pop-up should be triggered based on the cursor's position and context.
+     * @returns A trigger info object if suggestions should be shown, otherwise null.
+     */
+    onTrigger(cursor: EditorPosition, editor: Editor, file: TFile): EditorSuggestTriggerInfo | null {
+        const line = editor.getLine(cursor.line);
+
+        // Case 1: Single-line format ` ```bibkey key...`
+        if (line.startsWith(PLUGIN_CONSTANTS.SINGLE_LINE_PREFIX)) {
+            const closingTicksIndex = line.lastIndexOf(PLUGIN_CONSTANTS.CLOSING_BACKTICKS);
+            // Trigger only if the cursor is inside the code block's content area.
+            if (closingTicksIndex === -1 || cursor.ch <= closingTicksIndex) {
+                 const query = line.substring(PLUGIN_CONSTANTS.SINGLE_LINE_PREFIX.length, cursor.ch);
+                 return {
+                     start: { line: cursor.line, ch: PLUGIN_CONSTANTS.SINGLE_LINE_PREFIX.length },
+                     end: cursor,
+                     query: query,
+                 };
+            }
+        }
+
+        // Case 2: Multi-line format
+        if (cursor.line > 0) {
+            const prevLine = editor.getLine(cursor.line - 1);
+            // Trigger if the previous line is the opening of the block and the current line is not the closing.
+            if (prevLine.trim() === `\`\`\`${PLUGIN_CONSTANTS.BIBKEY_CODE_BLOCK}` && line.trim() !== PLUGIN_CONSTANTS.CLOSING_BACKTICKS) {
+                 const query = line.trim();
+                 const startCh = line.indexOf(query);
+                 return {
+                     start: { line: cursor.line, ch: startCh },
+                     end: { line: cursor.line, ch: startCh + query.length },
+                     query: query,
+                 };
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Fetches and filters suggestions based on the user's query.
+     * This method is highly optimized to search against the pre-computed cache.
+     * @param context The context of the suggestion trigger, containing the query.
+     * @returns A promise that resolves to an array of matching entries.
+     */
+    async getSuggestions(context: EditorSuggestContext): Promise<FormattedBibtexEntry[]> {
+        const query = context.query.toLowerCase();
+        if (query.length < PLUGIN_CONSTANTS.MIN_QUERY_LENGTH) return [];
+
+        // Tokenize the query to allow for more flexible searching (e.g., "smi 21" matches "Smith 2021").
+        const queryTokens = query
+            .split(' ')
+            .filter(w => w.length > 0)
+            .flatMap(part => part.match(/[a-z]+|\d+/g) || []);
+
+        if (queryTokens.length === 0) return [];
+
+        const allCachedEntries = Array.from(this.plugin.bibCache.values());
+        const suggestions: FormattedBibtexEntry[] = [];
+
+        for (const cachedEntry of allCachedEntries) {
+            // Search against the pre-computed `searchableText` for maximum performance.
+            const searchableText = cachedEntry.searchableText;
+            const entryWords = searchableText.split(/[\s,.:;!?()"]+/).filter(w => w.length > 0);
+
+            // Check if every query token is a substring of at least one word in the entry.
+            const isMatch = queryTokens.every(token =>
+                entryWords.some(entryWord => entryWord.includes(token))
+            );
+
+            if (isMatch) {
+                suggestions.push(cachedEntry.formattedEntry);
+            }
+
+            // Limit the number of suggestions for performance.
+            if (suggestions.length >= PLUGIN_CONSTANTS.MAX_SUGGESTIONS) {
+                break;
+            }
+        }
+
+        // Sort results alphabetically as a default ranking.
+        suggestions.sort((a, b) => a.bibkey.localeCompare(b.bibkey));
+
+        return suggestions;
+    }
+
+    /**
+     * Renders the HTML for a single suggestion item in the pop-up menu.
+     * @param suggestion The BibTeX entry to render.
+     * @param el The HTML element to render into.
+     */
+    renderSuggestion(suggestion: FormattedBibtexEntry, el: HTMLElement): void {
+        el.addClass(PLUGIN_CONSTANTS.CSS_CLASSES.CSS_SUGGESTION_ITEM);
+        
+        el.createEl('div', { text: suggestion.bibkey, cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_SUGGESTION_KEY });
+
+        const detailsContainer = el.createEl('div', { cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_SUGGESTION_DETAILS });
+        
+        const authorField = suggestion.fields.find(f => f.fieldName.toLowerCase() === 'author');
+        const editorField = suggestion.fields.find(f => f.fieldName.toLowerCase() === 'editor');
+        const yearField = suggestion.fields.find(f => f.fieldName.toLowerCase() === 'year');
+        const titleField = suggestion.fields.find(f => f.fieldName.toLowerCase() === 'title');
+
+        // Line 1: Combine Author/Editor and Year for a quick overview.
+        const primaryCreatorField = authorField || editorField;
+        let authorYearText = '';
+        if (primaryCreatorField) {
+            authorYearText = primaryCreatorField.fieldValue;
+        }
+        if (yearField) {
+            authorYearText += `, ${yearField.fieldValue}`;
+        }
+        if (authorYearText) {
+            detailsContainer.createEl('div', { text: authorYearText.trim(), cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_SUGGESTION_AUTHOR_YEAR });
+        }
+
+        // Line 2: Display the title with special formatting based on entry type.
+        if (titleField) {
+            const titleEl = detailsContainer.createEl('div', { cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_SUGGESTION_TITLE });
+            const entryType = suggestion.entryType.toLowerCase();
+
+            if (entryType === 'article' || entryType === 'inbook') {
+                titleEl.setText(`"${titleField.fieldValue}"`); // Add quotes
+            } else if (entryType === 'book') {
+                titleEl.createEl('em', { text: titleField.fieldValue }); // Italicize
+            } else {
+                titleEl.setText(titleField.fieldValue); // Default
+            }
+        }
+    }
+
+    /**
+     * Called when the user selects a suggestion. This method handles inserting the key
+     * and intelligently moving the cursor for a smooth workflow.
+     * @param suggestion The selected BibTeX entry.
+     */
+    selectSuggestion(suggestion: FormattedBibtexEntry, evt: MouseEvent | KeyboardEvent): void {
+        if (!this.context) return;
+        const { editor, start, end } = this.context;
+        const line = editor.getLine(start.line);
+
+        // Replace the user's query with the full bibkey.
+        editor.replaceRange(suggestion.bibkey, start, end);
+
+        if (line.startsWith(PLUGIN_CONSTANTS.SINGLE_LINE_PREFIX)) {
+            // --- Single-line mode ---
+            const lineContent = editor.getLine(start.line);
+            const closingTicksIndex = lineContent.lastIndexOf(PLUGIN_CONSTANTS.CLOSING_BACKTICKS);
+            
+            // Find the position right after the closing backticks.
+            const finalCh = (closingTicksIndex !== -1) 
+                ? closingTicksIndex + PLUGIN_CONSTANTS.CLOSING_BACKTICKS.length 
+                : lineContent.length;
+            
+            const finalCursorPos = { line: start.line, ch: finalCh };
+            editor.setCursor(finalCursorPos);
+
+            // If closing backticks were missing, add them. Then add a newline to exit the block.
+            if (closingTicksIndex === -1) {
+                editor.replaceSelection(PLUGIN_CONSTANTS.CLOSING_BACKTICKS);
+            }
+            editor.replaceSelection('\n');
+            
+        } else {
+            // --- Multi-line mode ---
+            // Find the line with the closing backticks.
+            let closingLineNum = -1;
+            for (let i = start.line + 1; i < editor.lineCount(); i++) {
+                if (editor.getLine(i).trim() === PLUGIN_CONSTANTS.CLOSING_BACKTICKS) {
+                    closingLineNum = i;
+                    break;
+                }
+            }
+
+            if (closingLineNum !== -1) {
+                // If found, move the cursor to the line after the block.
+                const targetLineNum = closingLineNum + 1;
+                if (targetLineNum >= editor.lineCount()) {
+                    // If at the end of the file, add a new line.
+                    editor.replaceRange('\n', { line: closingLineNum, ch: editor.getLine(closingLineNum).length });
+                }
+                editor.setCursor({ line: targetLineNum, ch: 0 });
+            } else {
+                // If not found, add the closing backticks and a newline, then move the cursor.
+                const endOfKeyLine = { line: start.line, ch: editor.getLine(start.line).length };
+                editor.replaceRange(`\n${PLUGIN_CONSTANTS.CLOSING_BACKTICKS}\n`, endOfKeyLine);
+                editor.setCursor({ line: start.line + 2, ch: 0 });
+            }
+        }
+        
+        this.close();
+    }
+}
+
 // --- HELPER FUNCTIONS ---
 /**
  * Converts a string to title case, leaving small words lowercase.
@@ -79,273 +588,10 @@ function toTitleCase(str: string): string {
     }).join(' ');
 }
 
-// --- DATA STRUCTURE INTERFACES ---
-interface FieldNameAndValue {
-    fieldName: string;
-    fieldValue: string;
-}
-
-interface FormattedBibtexEntry {
-    entryType: string;
-    bibkey: string;
-    fields: FieldNameAndValue[];
-}
-
-// OPTIMIZATION: Interface for the cached entry object.
-interface CachedBibEntry {
-    formattedEntry: FormattedBibtexEntry;
-    searchableText: string;
-}
-
-// 3. MAIN PLUGIN CLASS
-export default class BibtexEntryViewPlugin extends Plugin {
-    settings: BibtexEntryViewSettings;
-    // OPTIMIZATION: A new cache for pre-processed entries.
-    bibCache: Map<string, CachedBibEntry> = new Map();
-
-    async onload() {
-        await this.loadSettings();
-        
-        this.addSettingTab(new BibtexEntryViewSettingTab(this.app, this));
-
-        this.registerEditorSuggest(new BibkeySuggester(this.app, this));
-
-        this.registerEvent(this.app.vault.on('modify', async (file) => {
-            if (file.path === this.settings.bibFilePath) {
-                await this.loadBibFile();
-                this.app.workspace.updateOptions();
-            }
-        }));
-
-        this.app.workspace.onLayoutReady(async () => {
-            await this.loadBibFile();
-
-            this.registerMarkdownCodeBlockProcessor(PLUGIN_CONSTANTS.BIBKEY_CODE_BLOCK, (source, element, context) => {
-                const bibkey = source.trim();
-                element.empty(); // Clear the container first
-
-                if (!bibkey) {
-                    // If the code block is empty, show a placeholder message.
-                    const entryPre = element.createEl('pre');
-                    const entryCode = entryPre.createEl('code', { cls: `${PLUGIN_CONSTANTS.CSS_CLASSES.CSS_BIBTEX_ENTRY} ${PLUGIN_CONSTANTS.CSS_CLASSES.CSS_BIBTEX_ERROR}` });
-                    entryCode.createEl('span', {
-                        text: PLUGIN_CONSTANTS.EMPTY_KEY_MSG,
-                        cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_INVALID_KEY
-                    });
-                    return;
-                }
-
-                // OPTIMIZATION: Use the new bibCache
-                const cachedEntry = this.bibCache.get(bibkey);
-
-                if (cachedEntry) {
-                    // Extract the pre-formatted entry
-                    const parsedEntry = cachedEntry.formattedEntry;
-                    const entryPre = element.createEl('pre');
-                    const entryCode = entryPre.createEl('code', { cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_BIBTEX_ENTRY });
-                    
-                    entryCode.createEl('span', { text: parsedEntry.bibkey, cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_BIBKEY });
-                    
-                    parsedEntry.fields.forEach((field) => {
-                        entryCode.appendText('\n');
-                        entryCode.createEl('span', { text: field.fieldName, cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_FIELD_NAME });
-                        entryCode.createEl('span', { text: ': ', cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_FIELD_NAME });
-                        
-                        // Handle author/editor fields specially to style "and"
-                        const fieldNameLower = field.fieldName.toLowerCase();
-                        if (fieldNameLower === 'author' || fieldNameLower === 'editor') {
-                            const creators = field.fieldValue.split(' and ');
-                            creators.forEach((creator, index) => {
-                                entryCode.createEl('span', { text: creator, cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_FIELD_VALUE });
-                                if (index < creators.length - 1) {
-                                    // Add ' and ' with the field name class
-                                    entryCode.createEl('span', { text: ' and ', cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_FIELD_NAME });
-                                }
-                            });
-                        } else {
-                            // Default behavior for all other fields
-                            entryCode.createEl('span',{ text: field.fieldValue, cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_FIELD_VALUE } )
-                        }
-                    });
-                } else {
-                    // This handles keys that are provided but not found in the .bib file.
-                    const entryPre = element.createEl('pre');
-                    const entryCode = entryPre.createEl('code', { cls: `${PLUGIN_CONSTANTS.CSS_CLASSES.CSS_BIBTEX_ENTRY} ${PLUGIN_CONSTANTS.CSS_CLASSES.CSS_BIBTEX_ERROR}` });
-                    
-                    // Display the invalid key first.
-                    entryCode.createEl('span', {
-                        text: bibkey,
-                        cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_INVALID_KEY
-                    });
-
-                    // Append the guide text.
-                    entryCode.appendText(' '); // Add a space for separation.
-                    entryCode.createEl('span', {
-                        text: PLUGIN_CONSTANTS.EMPTY_KEY_MSG,
-                        cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_INVALID_KEY
-                    });
-                }
-            });
-
-            this.app.workspace.updateOptions();
-        });
-    }
-
-    onunload() {
-        // OPTIMIZATION: Clear the new cache
-        this.bibCache.clear();
-    }
-
-    async loadSettings() {
-        this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-    }
-
-    async saveSettings() {
-        await this.saveData(this.settings);
-        await this.loadBibFile();
-        this.app.workspace.updateOptions();
-    }
-    
-    async loadBibFile() {
-        // OPTIMIZATION: Clear the new cache before loading
-        this.bibCache.clear();
-        const { bibFilePath } = this.settings;
-
-        if (!bibFilePath) return;
-
-        const bibFile = this.app.vault.getAbstractFileByPath(bibFilePath);
-
-        if (!(bibFile instanceof TFile)) {
-            new Notice(PLUGIN_CONSTANTS.FILE_NOT_FOUND_MSG(bibFilePath));
-            return;
-        }
-
-        try {
-            const content = await this.app.vault.read(bibFile);
-            // ROBUSTNESS: Use the new method to parse and cache entries with a dedicated library
-            this.parseAndCacheBibtex(content);
-        } catch (error) {
-            new Notice(PLUGIN_CONSTANTS.PARSE_ERROR_MSG);
-            console.error('BibtexEntryView Error:', error);
-        }
-    }
-    
-    // ROBUSTNESS: This method now uses a dedicated library to parse the file and populates the rich cache upfront.
-    private parseAndCacheBibtex(content: string) {
-        try {
-            this.bibCache.clear();
-            // Use the bibtex-parser library. It returns errors in the result object.
-            const bibtex = bibtexParse(content);
-
-            // Log any errors found by the parser
-            for (const error of bibtex.errors) {
-                console.warn("Bibtex-parser error:", error);
-            }
-
-            for (const entry of bibtex.entries) {
-                if (!entry.key) continue; // Skip entries without a key
-
-                const bibkey = entry.key;
-                const entryType = entry.type;
-                
-                // Convert library's fields object to our FieldNameAndValue array, handling different value types
-                const allParsedFields: FieldNameAndValue[] = Object.entries(entry.fields).map(([fieldName, value]) => {
-                    let fieldValue: string;
-                    const lowerFieldName = fieldName.toLowerCase();
-
-                    // First, determine the base string value for the field
-                    if (Array.isArray(value)) {
-                        // Check if it's an array of Creators (authors/editors)
-                        if (value.length > 0 && typeof value[0] === 'object' && value[0] !== null && ('lastName' in value[0] || 'firstName' in value[0] || 'name' in value[0])) {
-                            fieldValue = (value as Creator[]).map(creator => {
-                                if (creator.name) return creator.name;
-                                if (creator.lastName && creator.firstName) return `${creator.lastName}, ${creator.firstName}`;
-                                return creator.lastName || creator.firstName || '';
-                            }).join(' and ');
-                        } else {
-                            // It's an array of strings
-                            fieldValue = (value as string[]).join(' ');
-                        }
-                    } else {
-                        // It's a plain string
-                        fieldValue = value as string;
-                    }
-
-                    // Second, apply title casing if the field is a title/subtitle
-                    const titleFields = ['title', 'subtitle', 'booktitle', 'booksubtitle', 'maintitle', 'mainsubtitle'];
-                    if (titleFields.includes(lowerFieldName)) {
-                        fieldValue = toTitleCase(fieldValue);
-                    }
-
-                    return {
-                        fieldName: lowerFieldName,
-                        fieldValue: fieldValue
-                    };
-                });
-                
-                // The sorting logic is now self-contained in formatAndSortBibtexFields
-                const formattedEntry = this.formatAndSortBibtexFields({ entryType, bibkey, fields: allParsedFields });
-
-                // --- Pre-computation Step ---
-                const textParts = [formattedEntry.bibkey];
-                const fieldsToSearch = this.settings.fieldSortOrder.map(f => f.toLowerCase());
-                
-                formattedEntry.fields.forEach(field => {
-                    if (fieldsToSearch.includes(field.fieldName.toLowerCase())) {
-                        textParts.push(field.fieldValue);
-                    }
-                });
-                const searchableText = textParts.join(' ').toLowerCase();
-                // --- End of Pre-computation ---
-
-                this.bibCache.set(bibkey, {
-                    formattedEntry,
-                    searchableText
-                });
-            }
-        } catch (error) {
-            new Notice(PLUGIN_CONSTANTS.PARSE_ERROR_MSG);
-            console.error('BibtexEntryView: Error parsing .bib file with library', error);
-        }
-    }
-
-    // ROBUSTNESS: This function no longer parses a string; it only sorts pre-parsed fields.
-    formatAndSortBibtexFields(input: { entryType: string, bibkey: string, fields: FieldNameAndValue[] }): FormattedBibtexEntry {
-        const { entryType, bibkey, fields } = input;
-        
-        const allParsedFields = [...fields];
-        allParsedFields.push({ fieldName: 'entrytype', fieldValue: entryType });
-        
-        const priorityOrder = this.settings.fieldSortOrder.map(f => f.toLowerCase());
-        let fieldsToRender = allParsedFields.filter(field => priorityOrder.includes(field.fieldName.toLowerCase()));
-
-        let primaryField: FieldNameAndValue | undefined;
-        const authorIndex = fieldsToRender.findIndex(f => f.fieldName.toLowerCase() === 'author');
-        if (authorIndex !== -1) {
-            primaryField = fieldsToRender.splice(authorIndex, 1)[0];
-        } else {
-            const editorIndex = fieldsToRender.findIndex(f => f.fieldName.toLowerCase() === 'editor');
-            if (editorIndex !== -1) {
-                primaryField = fieldsToRender.splice(editorIndex, 1)[0];
-            }
-        }
-        
-        fieldsToRender.sort((a, b) => {
-            const fieldNameA = a.fieldName.toLowerCase();
-            const fieldNameB = b.fieldName.toLowerCase();
-            const sortIndexA = priorityOrder.indexOf(fieldNameA);
-            const sortIndexB = priorityOrder.indexOf(fieldNameB);
-            if (sortIndexA !== -1 && sortIndexB !== -1) return sortIndexA - sortIndexB;
-            return 0;
-        });
-        
-        const sortedFields = primaryField ? [primaryField, ...fieldsToRender] : fieldsToRender;
-
-        return { entryType, bibkey, fields: sortedFields };
-    }
-}
-
-// 4. SETTINGS TAB CLASS
+// 5. SETTINGS TAB CLASS
+/**
+ * Creates the settings tab for the plugin in Obsidian's settings menu.
+ */
 class BibtexEntryViewSettingTab extends PluginSettingTab {
     plugin: BibtexEntryViewPlugin;
 
@@ -354,12 +600,16 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
         this.plugin = plugin;
     }
 
+    /**
+     * Renders the settings UI elements.
+     */
     display(): void {
         const { containerEl } = this;
         containerEl.empty();
         
         containerEl.createEl('h2', { text: 'Bib file' });
 
+        // Display the currently selected .bib file path (read-only).
         new Setting(containerEl)
             .setName('Current .bib file in the vault')
             .setDesc('This is the file the plugin is currently using.')
@@ -369,6 +619,7 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
                 .setDisabled(true)
             );
         
+        // Add buttons for selecting a file from the vault or importing a new one.
         new Setting(containerEl)
             .setName('Select or import a .bib file')
             .setDesc('Choose a file from your vault or import one from your computer. • Beware: Importing a file will overwrite the file of same name in the vault.')
@@ -379,7 +630,7 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
                     new BibFileSelectionModal(this.app, (selectedPath) => {
                         this.plugin.settings.bibFilePath = selectedPath;
                         this.plugin.saveSettings();
-                        this.display();
+                        this.display(); // Re-render the settings tab to show the new path
                     }).open();
                 }))
             .addButton(button => button
@@ -416,6 +667,7 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
         
         containerEl.createEl('h2', { text: 'Customize rendering' });
 
+        // Add a textarea for users to define the field display order.
         new Setting(containerEl)
             .setName('Fields to display and sort')
             .setDesc('List the fields you want to display, in the order you want them to appear. Fields not in this list will be hidden. \nNote: Author and editor fields have a special priority.')
@@ -430,12 +682,18 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
             });
     }
 
+    /**
+     * Called when the settings tab is closed. Saves the settings.
+     */
     hide(): void {
         this.plugin.saveSettings();
     }
 }
 
-// 5. FILE SELECTION MODAL
+// 6. FILE SELECTION MODAL
+/**
+ * A modal window that allows users to search for and select a .bib file from their vault.
+ */
 class BibFileSelectionModal extends Modal {
     onChooseFile: (path: string) => void;
     private bibFiles: TFile[];
@@ -443,16 +701,21 @@ class BibFileSelectionModal extends Modal {
     constructor(app: App, onChooseFile: (path: string) => void) {
         super(app);
         this.onChooseFile = onChooseFile;
+        // Get all .bib files in the vault at the time of creation.
         this.bibFiles = this.app.vault.getFiles()
             .filter(file => file.extension === PLUGIN_CONSTANTS.BIB_FILE_EXTENSION)
             .sort((a, b) => a.path.localeCompare(b.path));
     }
 
+    /**
+     * Renders the content of the modal.
+     */
     onOpen() {
         const { contentEl } = this;
         contentEl.empty();
         contentEl.createEl('h2', { text: 'Select BibTeX File from Vault' });
 
+        // Create a search input to filter the file list.
         const searchInput = new TextComponent(contentEl)
             .setPlaceholder(PLUGIN_CONSTANTS.DEFAULT_SEARCH_PLACEHOLDER);
         searchInput.inputEl.style.width = '100%';
@@ -460,6 +723,7 @@ class BibFileSelectionModal extends Modal {
         
         const listEl = contentEl.createEl('div');
         
+        // Function to update the displayed list based on the search filter.
         const updateList = (filter: string) => {
             listEl.empty();
             const filtered = this.bibFiles.filter(f => f.path.toLowerCase().includes(filter.toLowerCase()));
@@ -479,162 +743,13 @@ class BibFileSelectionModal extends Modal {
         };
 
         searchInput.onChange(updateList);
-        updateList('');
+        updateList(''); // Initially display all files.
     }
 
+    /**
+     * Cleans up the modal content when it's closed.
+     */
     onClose() {
         this.contentEl.empty();
-    }
-}
-
-// 6. AUTOCOMPLETE SUGGESTER CLASS
-// Provides an autocomplete dropdown for bibkeys within a `bibkey` code block.
-class BibkeySuggester extends EditorSuggest<FormattedBibtexEntry> {
-    plugin: BibtexEntryViewPlugin;
-
-    constructor(app: App, plugin: BibtexEntryViewPlugin) {
-        super(app);
-        this.plugin = plugin;
-    }
-
-    // Determines if the suggester should trigger.
-    onTrigger(cursor: EditorPosition, editor: Editor, file: TFile): EditorSuggestTriggerInfo | null {
-        const line = editor.getLine(cursor.line);
-
-        // Case 1: Single-line format ` ```bibkey key... `
-        const singleLinePrefix = PLUGIN_CONSTANTS.SINGLE_LINE_PREFIX;
-        if (line.startsWith(singleLinePrefix) && !line.endsWith(PLUGIN_CONSTANTS.CLOSING_BACKTICKS)) {
-            const query = line.substring(singleLinePrefix.length, cursor.ch);
-            return {
-                start: { line: cursor.line, ch: singleLinePrefix.length },
-                end: cursor,
-                query: query,
-            };
-        }
-
-        // Case 2: Multi-line format
-        if (cursor.line > 0) {
-            const prevLine = editor.getLine(cursor.line - 1);
-            if (prevLine.trim() === `\`\`\`${PLUGIN_CONSTANTS.BIBKEY_CODE_BLOCK}` && line.trim() !== PLUGIN_CONSTANTS.CLOSING_BACKTICKS) {
-                 const query = line.trim();
-                 const startCh = line.indexOf(query);
-                 return {
-                     start: { line: cursor.line, ch: startCh },
-                     end: { line: cursor.line, ch: startCh + query.length },
-                     query: query,
-                 };
-            }
-        }
-
-        return null;
-    }
-
-    // OPTIMIZATION: This method is now much faster as it uses the pre-built cache.
-    async getSuggestions(context: EditorSuggestContext): Promise<FormattedBibtexEntry[]> {
-        const query = context.query.toLowerCase();
-        if (query.length < PLUGIN_CONSTANTS.MIN_QUERY_LENGTH) return [];
-
-        const queryTokens = query
-            .split(' ')
-            .filter(w => w.length > 0)
-            .flatMap(part => part.match(/[a-z]+|\d+/g) || []);
-
-        if (queryTokens.length === 0) return [];
-
-        // Get all cached entries directly from the plugin
-        const allCachedEntries = Array.from(this.plugin.bibCache.values());
-        const suggestions: FormattedBibtexEntry[] = [];
-
-        for (const cachedEntry of allCachedEntries) {
-            // The expensive parsing and text-building work is GONE from this loop!
-            // We now use the pre-computed `searchableText`.
-            const searchableText = cachedEntry.searchableText;
-
-            const entryWords = searchableText.split(/[\s,.:;!?()"]+/).filter(w => w.length > 0);
-
-            const isMatch = queryTokens.every(token =>
-                entryWords.some(entryWord => entryWord.includes(token))
-            );
-
-            if (isMatch) {
-                // Add the pre-formatted entry object to the suggestions
-                suggestions.push(cachedEntry.formattedEntry);
-            }
-
-            if (suggestions.length >= PLUGIN_CONSTANTS.MAX_SUGGESTIONS) {
-                break;
-            }
-        }
-
-        suggestions.sort((a, b) => a.bibkey.localeCompare(b.bibkey));
-
-        return suggestions;
-    }
-
-    // Renders how each suggestion item looks in the pop-up.
-    renderSuggestion(suggestion: FormattedBibtexEntry, el: HTMLElement): void {
-        el.addClass(PLUGIN_CONSTANTS.CSS_CLASSES.CSS_SUGGESTION_ITEM);
-        
-        el.createEl('div', { text: suggestion.bibkey, cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_SUGGESTION_KEY });
-
-        const detailsContainer = el.createEl('div', { cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_SUGGESTION_DETAILS });
-        
-        const authorField = suggestion.fields.find(f => f.fieldName.toLowerCase() === 'author');
-        const editorField = suggestion.fields.find(f => f.fieldName.toLowerCase() === 'editor');
-        const yearField = suggestion.fields.find(f => f.fieldName.toLowerCase() === 'year');
-        const titleField = suggestion.fields.find(f => f.fieldName.toLowerCase() === 'title');
-
-        // Line 1: Combine Author/Editor and Year
-        const primaryCreatorField = authorField || editorField;
-        let authorYearText = '';
-        if (primaryCreatorField) {
-            authorYearText = primaryCreatorField.fieldValue;
-        }
-        if (yearField) {
-            // Add year with a comma separator.
-            authorYearText += `, ${yearField.fieldValue}`;
-        }
-        if (authorYearText) {
-            detailsContainer.createEl('div', { 
-                text: authorYearText.trim(), 
-                cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_SUGGESTION_AUTHOR_YEAR
-            });
-        }
-
-        // Line 2: Title, with conditional formatting
-        if (titleField) {
-            const titleEl = detailsContainer.createEl('div', { cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_SUGGESTION_TITLE });
-            const entryType = suggestion.entryType.toLowerCase();
-
-            if (entryType === 'article' || entryType === 'inbook') {
-                // Add double quotes for articles and inbooks
-                titleEl.setText(`"${titleField.fieldValue}"`);
-            } else if (entryType === 'book') {
-                // Italicize for books by creating an 'em' (emphasis) tag
-                titleEl.createEl('em', { text: titleField.fieldValue });
-            } else {
-                // Default rendering for other types
-                titleEl.setText(titleField.fieldValue);
-            }
-        }
-    }
-
-    // Called when the user selects a suggestion.
-    selectSuggestion(suggestion: FormattedBibtexEntry, evt: MouseEvent | KeyboardEvent): void {
-        if (!this.context) return;
-        const { editor, start } = this.context;
-        const line = editor.getLine(start.line);
-
-        if (line.startsWith(PLUGIN_CONSTANTS.SINGLE_LINE_PREFIX)) {
-            // Single-line mode: replace from start of query to end of line, and add closing backticks.
-            const replacement = `${suggestion.bibkey}${PLUGIN_CONSTANTS.CLOSING_BACKTICKS}`;
-            const endOfLine = { line: start.line, ch: line.length };
-            editor.replaceRange(replacement, start, endOfLine);
-        } else {
-            // Multi-line mode: just replace the typed key.
-            editor.replaceRange(suggestion.bibkey, this.context.start, this.context.end);
-        }
-        
-        this.close();
     }
 }
