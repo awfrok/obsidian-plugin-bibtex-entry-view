@@ -56,18 +56,18 @@
 - Or, import one in the settings.
 - Or, make a symbolic link to user's own `.bib` file in the root of the vault.
 
-### in the `settings` 
+### `settings` tab example
 
 ![settings.png](settings.png)
 
-#### choose a `.bib` file
+### choose a `.bib` file
 
 - Initially, the current `.bib` file is empty.
 - A user needs to choose the `.bib` file or the symbolic link in the vault.
 - Or, a user can import a `.bib` file from outside the vault into the vault. 
   - Beware: This will overwrite any file that has the same name in the vault.
 
-#### customize rendering
+### customize rendering
 
 - A user can choose fields and their order to render.
 
