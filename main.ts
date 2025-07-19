@@ -1,5 +1,5 @@
 //
-// v. 0.2.2.1
+// v. 0.2.2.2
 //
 
 import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, TextComponent, Editor, EditorPosition, EditorSuggest, EditorSuggestContext, EditorSuggestTriggerInfo } from 'obsidian';
@@ -37,6 +37,7 @@ const PLUGIN_CONSTANTS = {
     BIBKEY_CODE_BLOCK: 'bibkey',
     SINGLE_LINE_PREFIX: '```bibkey ',
     CLOSING_BACKTICKS: '```',
+    NEWLINE_SEPARATOR: '\n',
     MIN_QUERY_LENGTH: 2,
     MAX_SUGGESTIONS: 50,
     SORTORDER_AREA_ROWS: 10,
@@ -48,6 +49,28 @@ const PLUGIN_CONSTANTS = {
     PARSE_ERROR_MSG: 'BibtexEntryView: Error reading or parsing .bib file.',
     IMPORT_ERROR_MSG: (error: string) => `BibtexEntryView: Error importing file: ${error}`,
     NO_FILES_FOUND_MSG: 'No matching .bib files found.',
+    SETTINGS: {
+        
+        // --- Bib File Setting ---
+        BIB_FILE_SECTION_TITLE: 'Bib file',
+        CURRENT_BIB_FILE_NAME: 'Current .bib file in the vault',
+        CURRENT_BIB_FILE_DESC: 'This is the file the plugin is currently using.',
+        NO_FILE_PLACEHOLDER: 'No file selected',
+        
+        // --- Select/Import Buttons ---
+        SELECT_IMPORT_NAME: 'Select or import a .bib file',
+        SELECT_IMPORT_DESC: 'Choose a file from your vault or import one from your computer. • Beware: Importing a file will overwrite the file of same name in the vault.',
+        SELECT_FROM_VAULT_TEXT: 'Select from vault',
+        SELECT_FROM_VAULT_TOOLTIP: 'Select a .bib file in your vault',
+        IMPORT_TO_VAULT_TEXT: 'Import to vault',
+        IMPORT_TO_VAULT_TOOLTIP: 'Beware: Importing a file will overwrite the file of same name in the vault.',
+        MODAL_TITLE: 'Select BibTeX File from Vault',
+        
+        // --- Field Sort Order Setting ---
+        CUSTOMIZE_RENDERING_SECTION_TITLE: 'Customize rendering',
+        FIELD_SORT_ORDER_NAME: 'Fields to display and sort',
+        FIELD_SORT_ORDER_DESC: 'List the fields you want to display, in the order you want them to appear. Fields not in this list will be hidden. \nNote: Author and editor fields have a special priority.',
+    },
     CSS_CLASSES: {
         CSS_BIBTEX_ENTRY: 'bibtex-entry-view',
         CSS_BIBTEX_ERROR: 'bibtex-error',
@@ -534,7 +557,7 @@ class BibkeySuggester extends EditorSuggest<FormattedBibtexEntry> {
             if (closingTicksIndex === -1) {
                 editor.replaceSelection(PLUGIN_CONSTANTS.CLOSING_BACKTICKS);
             }
-            editor.replaceSelection('\n');
+            editor.replaceSelection(PLUGIN_CONSTANTS.NEWLINE_SEPARATOR);
             
         } else {
             // --- Multi-line mode ---
@@ -552,13 +575,13 @@ class BibkeySuggester extends EditorSuggest<FormattedBibtexEntry> {
                 const targetLineNum = closingLineNum + 1;
                 if (targetLineNum >= editor.lineCount()) {
                     // If at the end of the file, add a new line.
-                    editor.replaceRange('\n', { line: closingLineNum, ch: editor.getLine(closingLineNum).length });
+                    editor.replaceRange(PLUGIN_CONSTANTS.NEWLINE_SEPARATOR, { line: closingLineNum, ch: editor.getLine(closingLineNum).length });
                 }
                 editor.setCursor({ line: targetLineNum, ch: 0 });
             } else {
                 // If not found, add the closing backticks and a newline, then move the cursor.
                 const endOfKeyLine = { line: start.line, ch: editor.getLine(start.line).length };
-                editor.replaceRange(`\n${PLUGIN_CONSTANTS.CLOSING_BACKTICKS}\n`, endOfKeyLine);
+                editor.replaceRange(`${PLUGIN_CONSTANTS.NEWLINE_SEPARATOR}${PLUGIN_CONSTANTS.CLOSING_BACKTICKS}${PLUGIN_CONSTANTS.NEWLINE_SEPARATOR}`, endOfKeyLine);
                 editor.setCursor({ line: start.line + 2, ch: 0 });
             }
         }
@@ -611,25 +634,25 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
         const { containerEl } = this;
         containerEl.empty();
         
-        containerEl.createEl('h2', { text: 'Bib file' });
+        containerEl.createEl('h2', { text: PLUGIN_CONSTANTS.SETTINGS.BIB_FILE_SECTION_TITLE });
 
         // Display the currently selected .bib file path (read-only).
         new Setting(containerEl)
-            .setName('Current .bib file in the vault')
-            .setDesc('This is the file the plugin is currently using.')
+            .setName(PLUGIN_CONSTANTS.SETTINGS.CURRENT_BIB_FILE_NAME)
+            .setDesc(PLUGIN_CONSTANTS.SETTINGS.CURRENT_BIB_FILE_DESC)
             .addText(text => text
                 .setValue(this.plugin.settings.bibFilePath)
-                .setPlaceholder('No file selected')
+                .setPlaceholder(PLUGIN_CONSTANTS.SETTINGS.NO_FILE_PLACEHOLDER)
                 .setDisabled(true)
             );
         
         // Add buttons for selecting a file from the vault or importing a new one.
         new Setting(containerEl)
-            .setName('Select or import a .bib file')
-            .setDesc('Choose a file from your vault or import one from your computer. • Beware: Importing a file will overwrite the file of same name in the vault.')
+            .setName(PLUGIN_CONSTANTS.SETTINGS.SELECT_IMPORT_NAME)
+            .setDesc(PLUGIN_CONSTANTS.SETTINGS.SELECT_IMPORT_DESC)
             .addButton(button => button
-                .setButtonText('Select from vault')
-                .setTooltip('Select a .bib file in your vault')
+                .setButtonText(PLUGIN_CONSTANTS.SETTINGS.SELECT_FROM_VAULT_TEXT)
+                .setTooltip(PLUGIN_CONSTANTS.SETTINGS.SELECT_FROM_VAULT_TOOLTIP)
                 .onClick(() => {
                     new BibFileSelectionModal(this.app, (selectedPath) => {
                         this.plugin.settings.bibFilePath = selectedPath;
@@ -638,8 +661,8 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
                     }).open();
                 }))
             .addButton(button => button
-                .setButtonText('Import to vault')
-                .setTooltip('Beware: Importing a file will overwrite the file of same name in the vault.')
+                .setButtonText(PLUGIN_CONSTANTS.SETTINGS.IMPORT_TO_VAULT_TEXT)
+                .setTooltip(PLUGIN_CONSTANTS.SETTINGS.IMPORT_TO_VAULT_TOOLTIP)
                 .onClick(() => {
                     const fileInput = document.createElement('input');
                     fileInput.type = 'file';
@@ -669,17 +692,17 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
                     fileInput.click();
                 }));
         
-        containerEl.createEl('h2', { text: 'Customize rendering' });
+        containerEl.createEl('h2', { text: PLUGIN_CONSTANTS.SETTINGS.CUSTOMIZE_RENDERING_SECTION_TITLE });
 
         // Add a textarea for users to define the field display order.
         new Setting(containerEl)
-            .setName('Fields to display and sort')
-            .setDesc('List the fields you want to display, in the order you want them to appear. Fields not in this list will be hidden. \nNote: Author and editor fields have a special priority.')
+            .setName(PLUGIN_CONSTANTS.SETTINGS.FIELD_SORT_ORDER_NAME)
+            .setDesc(PLUGIN_CONSTANTS.SETTINGS.FIELD_SORT_ORDER_DESC)
             .addTextArea(text => {
                 text
-                    .setValue(this.plugin.settings.fieldSortOrder.join('\n'))
+                    .setValue(this.plugin.settings.fieldSortOrder.join(PLUGIN_CONSTANTS.NEWLINE_SEPARATOR))
                     .onChange((value) => {
-                        this.plugin.settings.fieldSortOrder = value.split('\n').map(field => field.trim()).filter(Boolean);
+                        this.plugin.settings.fieldSortOrder = value.split(PLUGIN_CONSTANTS.NEWLINE_SEPARATOR).map(field => field.trim()).filter(Boolean);
                     });
                 text.inputEl.rows = PLUGIN_CONSTANTS.SORTORDER_AREA_ROWS;
                 text.inputEl.cols = PLUGIN_CONSTANTS.SORTORDER_AREA_COLS;
@@ -717,7 +740,7 @@ class BibFileSelectionModal extends Modal {
     onOpen() {
         const { contentEl } = this;
         contentEl.empty();
-        contentEl.createEl('h2', { text: 'Select BibTeX File from Vault' });
+        contentEl.createEl('h2', { text: PLUGIN_CONSTANTS.SETTINGS.MODAL_TITLE });
 
         // Create a search input to filter the file list.
         const searchInput = new TextComponent(contentEl)
