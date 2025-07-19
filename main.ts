@@ -1,3 +1,7 @@
+//
+// v. 0.2.2.1
+//
+
 import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, TextComponent, Editor, EditorPosition, EditorSuggest, EditorSuggestContext, EditorSuggestTriggerInfo } from 'obsidian';
 import { parse as bibtexParse, Creator } from '@retorquere/bibtex-parser';
 
@@ -25,7 +29,7 @@ const DEFAULT_SETTINGS: BibtexEntryViewSettings = {
 };
 
 
-// --- CONSTANTS ---
+// 3. CONSTANTS 
 /**
  * Centralizes all hardcoded strings and numbers for easier maintenance and consistency.
  */
@@ -60,7 +64,7 @@ const PLUGIN_CONSTANTS = {
     }
 } as const;
 
-// --- DATA STRUCTURE INTERFACES ---
+// 4. DATA STRUCTURE INTERFACES
 /**
  * Represents a single field-value pair from a BibTeX entry.
  */
@@ -87,7 +91,7 @@ interface CachedBibEntry {
     searchableText: string;
 }
 
-// 3. MAIN PLUGIN CLASS
+// 5. MAIN PLUGIN CLASS
 /**
  * The main class for the BibtexEntryView plugin. It manages settings, data loading,
  * and the registration of all plugin components like code block processors and suggesters.
@@ -357,7 +361,7 @@ export default class BibtexEntryViewPlugin extends Plugin {
     }
 }
 
-// 4. AUTOCOMPLETE SUGGESTER CLASS
+// 6. AUTOCOMPLETE SUGGESTER CLASS
 /**
  * Provides an autocomplete dropdown menu for bibkeys inside a `bibkey` code block.
  */
@@ -563,7 +567,7 @@ class BibkeySuggester extends EditorSuggest<FormattedBibtexEntry> {
     }
 }
 
-// --- HELPER FUNCTIONS ---
+// 7. HELPER FUNCTIONS 
 /**
  * Converts a string to title case, leaving small words lowercase.
  * @param str The string to convert.
@@ -588,7 +592,7 @@ function toTitleCase(str: string): string {
     }).join(' ');
 }
 
-// 5. SETTINGS TAB CLASS
+// 8. SETTINGS TAB CLASS
 /**
  * Creates the settings tab for the plugin in Obsidian's settings menu.
  */
@@ -690,7 +694,7 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
     }
 }
 
-// 6. FILE SELECTION MODAL
+// 9. FILE SELECTION MODAL for SettingsTab
 /**
  * A modal window that allows users to search for and select a .bib file from their vault.
  */
