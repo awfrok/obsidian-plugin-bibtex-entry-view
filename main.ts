@@ -1,5 +1,5 @@
 //
-// v. 0.2.2.2
+// v. 0.2.3
 //
 
 import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, TextComponent, Editor, EditorPosition, EditorSuggest, EditorSuggestContext, EditorSuggestTriggerInfo } from 'obsidian';
@@ -270,7 +270,7 @@ export default class BibtexEntryViewPlugin extends Plugin {
         try {
             this.bibCache.clear();
             // Use the robust @retorquere/bibtex-parser library.
-            const bibtex = bibtexParse(content);
+            const bibtex = bibtexParse(content, { sentenceCase: false });
 
             // Log any parsing errors to the developer console for debugging.
             for (const error of bibtex.errors) {
@@ -304,12 +304,6 @@ export default class BibtexEntryViewPlugin extends Plugin {
                     } else {
                         // Handle plain string values.
                         fieldValue = value as string;
-                    }
-
-                    // Apply title case formatting to all title-related fields.
-                    const titleFields = ['title', 'subtitle', 'booktitle', 'booksubtitle', 'maintitle', 'mainsubtitle'];
-                    if (titleFields.includes(lowerFieldName)) {
-                        fieldValue = toTitleCase(fieldValue);
                     }
 
                     return {
@@ -590,32 +584,7 @@ class BibkeySuggester extends EditorSuggest<FormattedBibtexEntry> {
     }
 }
 
-// 7. HELPER FUNCTIONS 
-/**
- * Converts a string to title case, leaving small words lowercase.
- * @param str The string to convert.
- * @returns The title-cased string.
- */
-function toTitleCase(str: string): string {
-    if (!str) return '';
-    // This regex matches small, lowercase words that shouldn't be capitalized in the middle of a title.
-    const smallWords = /^(a|an|and|as|at|but|by|en|for|if|in|nor|of|on|or|per|the|to|vs?\.?|via)$/i;
-    
-    return str.toLowerCase().split(' ').map((word, index, array) => {
-        // Always capitalize the first word, or words that follow punctuation.
-        if (index === 0) {
-            return word.charAt(0).toUpperCase() + word.slice(1);
-        }
-        // Don't capitalize small words in the middle.
-        if (smallWords.test(word)) {
-            return word;
-        }
-        // Capitalize all other words.
-        return word.charAt(0).toUpperCase() + word.slice(1);
-    }).join(' ');
-}
-
-// 8. SETTINGS TAB CLASS
+// 7. SETTINGS TAB CLASS
 /**
  * Creates the settings tab for the plugin in Obsidian's settings menu.
  */
@@ -717,7 +686,7 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
     }
 }
 
-// 9. FILE SELECTION MODAL for SettingsTab
+// 8. FILE SELECTION MODAL for SettingsTab
 /**
  * A modal window that allows users to search for and select a .bib file from their vault.
  */
