@@ -1,5 +1,5 @@
 //
-// v. 0.2.3
+// v. 0.2.3.2
 //
 
 import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, TextComponent, Editor, EditorPosition, EditorSuggest, EditorSuggestContext, EditorSuggestTriggerInfo } from 'obsidian';
@@ -21,8 +21,8 @@ interface BibtexEntryViewSettings {
 const DEFAULT_SETTINGS: BibtexEntryViewSettings = {
     bibFilePath: '',
     fieldSortOrder: [
-        'author', 'year', 'entrytype', 'title', 'subtitle', 'editor', 
-        'booktitle', 'booksubtitle', 'maintitle', 'mainsubtitle', 
+        'author', 'year', 'entrytype', 'title', 'subtitle', 'translator',  
+        'editor', 'booktitle', 'booksubtitle', 'maintitle', 'mainsubtitle', 
         'edition', 'journal', 'series', 'volume',
         'number', 'pages', 'address', 'publisher'
     ]
@@ -388,6 +388,28 @@ class BibkeySuggester extends EditorSuggest<FormattedBibtexEntry> {
     constructor(app: App, plugin: BibtexEntryViewPlugin) {
         super(app);
         this.plugin = plugin;
+        this.setInstructions([
+            { command: '↑↓', purpose: 'to navigate' },
+            { command: '↵ or click', purpose: 'to select' },
+            { command: 'esc', purpose: 'to close' }
+        ]);
+    }
+
+    open() {
+        super.open();
+        // Set the width of the suggester to match the editor's text content width.
+        // We do this in `open` because the `this.context` is available here.
+        if (this.context?.editor) {
+            // The `cm` property is the CodeMirror 6 EditorView instance.
+            // We cast to `any` because it's not in the public API definition.
+            const textWidth = (this.context.editor as any).cm.contentDOM.clientWidth;
+            // `suggestions.containerEl` is the inner container for the suggestion items.
+            // To widen the entire frame, we need to target its parent element, which is the popover itself.
+            const suggesterEl = (this as any).suggestions.containerEl;
+            if (suggesterEl?.parentElement) {
+                suggesterEl.parentElement.style.width = `${textWidth}px`;
+            }
+        }
     }
 
     /**
