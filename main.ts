@@ -84,6 +84,11 @@ const PLUGIN_CONSTANTS = {
         CSS_SUGGESTION_AUTHOR_YEAR: 'bibkey-suggestion-author-year',
         CSS_SUGGESTION_TITLE: 'bibkey-suggestion-title',
         CSS_FILE_ITEM: 'bibtex-file-item',
+    },
+    SUGGESTER_INSTRUCTIONS: {
+        NAVIGATE: { command: '↑↓', purpose: 'to navigate' },
+        SELECT: { command: '↵ or \u{1F5B1}\u{FE0F}', purpose: 'to select' },
+        CLOSE: { command: 'esc', purpose: 'to close' }
     }
 } as const;
 
@@ -389,27 +394,10 @@ class BibkeySuggester extends EditorSuggest<FormattedBibtexEntry> {
         super(app);
         this.plugin = plugin;
         this.setInstructions([
-            { command: '↑↓', purpose: 'to navigate' },
-            { command: '↵ or click', purpose: 'to select' },
-            { command: 'esc', purpose: 'to close' }
+            PLUGIN_CONSTANTS.SUGGESTER_INSTRUCTIONS.NAVIGATE,
+            PLUGIN_CONSTANTS.SUGGESTER_INSTRUCTIONS.SELECT,
+            PLUGIN_CONSTANTS.SUGGESTER_INSTRUCTIONS.CLOSE
         ]);
-    }
-
-    open() {
-        super.open();
-        // Set the width of the suggester to match the editor's text content width.
-        // We do this in `open` because the `this.context` is available here.
-        if (this.context?.editor) {
-            // The `cm` property is the CodeMirror 6 EditorView instance.
-            // We cast to `any` because it's not in the public API definition.
-            const textWidth = (this.context.editor as any).cm.contentDOM.clientWidth;
-            // `suggestions.containerEl` is the inner container for the suggestion items.
-            // To widen the entire frame, we need to target its parent element, which is the popover itself.
-            const suggesterEl = (this as any).suggestions.containerEl;
-            if (suggesterEl?.parentElement) {
-                suggesterEl.parentElement.style.width = `${textWidth}px`;
-            }
-        }
     }
 
     /**
