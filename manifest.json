@@ -2,7 +2,7 @@
 	"id": "bibtex-entry-view",
 	"name": "Bibtex Entry View",
 	"version": "0.2.4",
-	"minAppVersion": "0.15.0",
+	"minAppVersion": "1.8.10",
 	"description": "Load the bibtex entry of a given bibkey from a given bib file and show the entry in the code block of bibkey.",
 	"author": "Kyoungdeuk",
 	"authorUrl": "",
