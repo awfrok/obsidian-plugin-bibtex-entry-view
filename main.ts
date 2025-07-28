@@ -1,5 +1,6 @@
 //
 // v. 0.2.4
+// coding style consistency update for the community plugin
 //
 
 import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, TextComponent, Editor, EditorPosition, EditorSuggest, EditorSuggestContext, EditorSuggestTriggerInfo } from 'obsidian';
