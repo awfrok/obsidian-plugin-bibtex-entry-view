@@ -1,5 +1,5 @@
 //
-// v. 0.2.3.2
+// v. 0.2.4
 //
 
 import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, TextComponent, Editor, EditorPosition, EditorSuggest, EditorSuggestContext, EditorSuggestTriggerInfo } from 'obsidian';
@@ -613,7 +613,9 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
         const { containerEl } = this;
         containerEl.empty();
         
-        containerEl.createEl('h2', { text: PLUGIN_CONSTANTS.SETTINGS.BIB_FILE_SECTION_TITLE });
+        new Setting(containerEl)
+            .setName(PLUGIN_CONSTANTS.SETTINGS.BIB_FILE_SECTION_TITLE)
+            .setHeading();
 
         // Display the currently selected .bib file path (read-only).
         new Setting(containerEl)
@@ -671,7 +673,9 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
                     fileInput.click();
                 }));
         
-        containerEl.createEl('h2', { text: PLUGIN_CONSTANTS.SETTINGS.CUSTOMIZE_RENDERING_SECTION_TITLE });
+        new Setting(containerEl)
+            .setName(PLUGIN_CONSTANTS.SETTINGS.CUSTOMIZE_RENDERING_SECTION_TITLE)
+            .setHeading();
 
         // Add a textarea for users to define the field display order.
         new Setting(containerEl)
@@ -680,19 +684,13 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
             .addTextArea(text => {
                 text
                     .setValue(this.plugin.settings.fieldSortOrder.join(PLUGIN_CONSTANTS.NEWLINE_SEPARATOR))
-                    .onChange((value) => {
+                    .onChange(async (value) => {
                         this.plugin.settings.fieldSortOrder = value.split(PLUGIN_CONSTANTS.NEWLINE_SEPARATOR).map(field => field.trim()).filter(Boolean);
+                        await this.plugin.saveSettings();
                     });
                 text.inputEl.rows = PLUGIN_CONSTANTS.SORTORDER_AREA_ROWS;
                 text.inputEl.cols = PLUGIN_CONSTANTS.SORTORDER_AREA_COLS;
             });
-    }
-
-    /**
-     * Called when the settings tab is closed. Saves the settings.
-     */
-    hide(): void {
-        this.plugin.saveSettings();
     }
 }
 
