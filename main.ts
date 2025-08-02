@@ -1,5 +1,5 @@
 //
-// v. 0.2.4
+// v. 0.2.4.2
 // coding style consistency update for the community plugin
 //
 
@@ -23,7 +23,7 @@ const DEFAULT_SETTINGS: BibtexEntryViewSettings = {
     bibFilePath: '',
     fieldSortOrder: [
         'author', 'year', 'entrytype', 'title', 'subtitle', 'translator',  
-        'editor', 'booktitle', 'booksubtitle', 'maintitle', 'mainsubtitle', 
+        'bookauthor', 'editor', 'booktitle', 'booksubtitle', 'maintitle', 'mainsubtitle', 
         'edition', 'journal', 'series', 'volume',
         'number', 'pages', 'address', 'publisher'
     ]
@@ -60,7 +60,7 @@ const PLUGIN_CONSTANTS = {
         
         // --- Select/Import Buttons ---
         SELECT_IMPORT_NAME: 'Select or import a .bib file',
-        SELECT_IMPORT_DESC: 'Choose a file from your vault or import one from your computer. • Beware: Importing a file will overwrite the file of same name in the vault.',
+        SELECT_IMPORT_DESC: 'Choose a file from your vault or import one from your computer.\n• Beware: Importing a file will overwrite the file of same name in the vault.',
         SELECT_FROM_VAULT_TEXT: 'Select from vault',
         SELECT_FROM_VAULT_TOOLTIP: 'Select a .bib file in your vault',
         IMPORT_TO_VAULT_TEXT: 'Import to vault',
@@ -70,7 +70,7 @@ const PLUGIN_CONSTANTS = {
         // --- Field Sort Order Setting ---
         CUSTOMIZE_RENDERING_SECTION_TITLE: 'Customize rendering',
         FIELD_SORT_ORDER_NAME: 'Fields to display and sort',
-        FIELD_SORT_ORDER_DESC: 'List the fields you want to display, in the order you want them to appear. Fields not in this list will be hidden. \nNote: Author and editor fields have a special priority.',
+        FIELD_SORT_ORDER_DESC: 'List the fields you want to display, in the order you want them to appear. Fields not in this list will be hidden. \n• Note: Author and editor fields have a special priority.',
     },
     CSS_CLASSES: {
         CSS_BIBTEX_ENTRY: 'bibtex-entry-view',
@@ -614,6 +614,7 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
         const { containerEl } = this;
         containerEl.empty();
         
+        // Display the heading for Bib File Setting 
         new Setting(containerEl)
             .setName(PLUGIN_CONSTANTS.SETTINGS.BIB_FILE_SECTION_TITLE)
             .setHeading();
@@ -673,7 +674,8 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
                     };
                     fileInput.click();
                 }));
-        
+
+        // Display the heading for Customizing Rendering
         new Setting(containerEl)
             .setName(PLUGIN_CONSTANTS.SETTINGS.CUSTOMIZE_RENDERING_SECTION_TITLE)
             .setHeading();
@@ -718,6 +720,7 @@ class BibFileSelectionModal extends Modal {
     onOpen() {
         const { contentEl } = this;
         contentEl.empty();
+
         contentEl.createEl('h2', { text: PLUGIN_CONSTANTS.SETTINGS.MODAL_TITLE });
 
         // Create a search input to filter the file list.
