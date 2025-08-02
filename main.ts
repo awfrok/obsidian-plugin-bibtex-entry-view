@@ -1,9 +1,9 @@
 //
-// 0.2.4.1
+// 0.2.4.2
 // 
 //
-// last commit: 0.2.4
-// coding style consistency update for the community plugin
+// last commit: 0.2.4.1
+// minor fix for coding style consistency update for the community plugin
 // 
 
 
