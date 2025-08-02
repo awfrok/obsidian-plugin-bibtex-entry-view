@@ -1,7 +1,11 @@
 //
-// v. 0.2.4.2
-// coding style consistency update for the community plugin
+// 0.2.4.1
+// 
 //
+// last commit: 0.2.4
+// coding style consistency update for the community plugin
+// 
+
 
 import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile, TextComponent, Editor, EditorPosition, EditorSuggest, EditorSuggestContext, EditorSuggestTriggerInfo } from 'obsidian';
 import { parse as bibtexParse, Creator } from '@retorquere/bibtex-parser';
@@ -721,7 +725,9 @@ class BibFileSelectionModal extends Modal {
         const { contentEl } = this;
         contentEl.empty();
 
-        contentEl.createEl('h2', { text: PLUGIN_CONSTANTS.SETTINGS.MODAL_TITLE });
+        new Setting(contentEl)
+            .setName(PLUGIN_CONSTANTS.SETTINGS.MODAL_TITLE)
+            .setHeading();
 
         // Create a search input to filter the file list.
         const searchInput = new TextComponent(contentEl)
