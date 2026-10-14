@@ -1,44 +1,46 @@
-.bibkey { 
-    color: var(--text-accent); 
-    /* font-weight: bold; */ 
+.bibkey {
+    color: var(--text-accent);
+    /* font-weight: bold; */
     opacity: 0.65;
 }
 
-.bibtex-field-name, .bibtex-entrytype { 
-    opacity: 0.5; 
+.bibtex-field-name /*, .bibtex-entrytype (unused: entry type renders as a regular field) */ {
+/*    opacity: 0.5;
+*/
+    color: var(--text-faint);
 }
 
-.bibtex-field-value { 
-    opacity: 0.65; 
-    font-weight: bold; 
+.bibtex-field-value {
+/*    opacity: 0.65;
+*/
+    color: var(--text-muted);
+    font-weight: bold;
 }
 
-.bibkey-invalid-key { 
-    color: var(--text-error); 
-    opacity: 0.6; 
-    text-decoration: line-through; 
+.bibkey-invalid-key {
+    color: var(--text-error);
+    opacity: 0.6;
+    text-decoration: line-through;
 }
 
-.bibtex-file-item { 
-    cursor: pointer; 
-    padding: 8px 10px; 
-    border-radius: var(--radius-s); 
+
+.bibtex-hidden-file-input {
+    display: none;
 }
 
-.bibtex-file-item:hover { 
-    background-color: var(--background-modifier-hover); 
+
+.bibtex-setting-desc-note {
+    display: inline-block;
+    margin-top: 4px;
+    color: var(--text-muted);
 }
 
-.bibtex-file-search-input {
-    width: 100%;
-    margin-bottom: 10px;
-}
-
-/* Styling for the autocomplete suggestion pop-up */
-.bibtex-suggestion-item {
+/* Styling for the autocomplete suggestion pop-up.
+   Both classes are required, so this outranks Obsidian's own .suggestion-item rule without !important. */
+.suggestion-item.bibtex-suggestion-item {
     display: flex;
     flex-direction: column; /* Stack key and details vertically */
-    padding: 8px !important;
+    padding: 8px;
     cursor: pointer;
     border-bottom: 1px solid var(--background-modifier-border);
 }
@@ -65,20 +67,25 @@
     gap: 2px; /* Small space between detail lines */
 }
 
-/* Style for the author/editor line */
-.bibkey-suggestion-author {
+/* Style for the author/editor and year line: one line, author and year side by side */
+.bibkey-suggestion-author-year {
+    display: flex;
     color: var(--text-normal);
     font-size: 1em;
     /*font-weight: bold;*/
     white-space: nowrap;
+}
+
+/* Author part: takes the remaining space and is cut with an ellipsis when too long */
+.bibkey-suggestion-author {
+    min-width: 0; /* Lets the flex item shrink below its content width; without it the ellipsis never shows */
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-/* Style for the year line */
+/* Year part: never shrinks, so the year always stays visible */
 .bibkey-suggestion-year {
-    /*color: var(--text-muted);*/
-    font-size: 1em;
+    flex-shrink: 0;
 }
 
 /* Style for the title line */
