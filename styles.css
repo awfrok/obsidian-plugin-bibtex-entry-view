@@ -29,6 +29,11 @@
     background-color: var(--background-modifier-hover); 
 }
 
+.bibtex-file-search-input {
+    width: 100%;
+    margin-bottom: 10px;
+}
+
 /* Styling for the autocomplete suggestion pop-up */
 .bibtex-suggestion-item {
     display: flex;

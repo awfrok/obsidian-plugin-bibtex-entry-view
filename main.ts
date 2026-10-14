@@ -1,7 +1,6 @@
-//
-// 0.2.4.2
 // 
-//
+// current: 0.2.4.2
+// minor fix for typescript version 5.
 // last commit: 0.2.4.1
 // minor fix for coding style consistency update for the community plugin
 // 
@@ -89,10 +88,11 @@ const PLUGIN_CONSTANTS = {
         CSS_SUGGESTION_AUTHOR_YEAR: 'bibkey-suggestion-author-year',
         CSS_SUGGESTION_TITLE: 'bibkey-suggestion-title',
         CSS_FILE_ITEM: 'bibtex-file-item',
+        CSS_FILE_SEARCH_INPUT: 'bibtex-file-search-input',
     },
     SUGGESTER_INSTRUCTIONS: {
         NAVIGATE: { command: '↑↓', purpose: 'to navigate' },
-        SELECT: { command: '↵ or \u{1F5B1}\u{FE0F}', purpose: 'to select' },
+        SELECT: { command: '↵', purpose: 'to select' },
         CLOSE: { command: 'esc', purpose: 'to close' }
     }
 } as const;
@@ -130,7 +130,7 @@ interface CachedBibEntry {
  * and the registration of all plugin components like code block processors and suggesters.
  */
 export default class BibtexEntryViewPlugin extends Plugin {
-    settings: BibtexEntryViewSettings;
+    settings!: BibtexEntryViewSettings;
     // An in-memory cache that stores pre-processed BibTeX entries for fast lookups.
     bibCache: Map<string, CachedBibEntry> = new Map();
 
@@ -169,7 +169,7 @@ export default class BibtexEntryViewPlugin extends Plugin {
                 if (!bibkey) {
                     const entryPre = element.createEl('pre');
                     const entryCode = entryPre.createEl('code', { cls: `${PLUGIN_CONSTANTS.CSS_CLASSES.CSS_BIBTEX_ENTRY} ${PLUGIN_CONSTANTS.CSS_CLASSES.CSS_BIBTEX_ERROR}` });
-                    entryCode.createEl('span', {
+                    entryCode.createSpan({
                         text: PLUGIN_CONSTANTS.EMPTY_KEY_MSG,
                         cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_INVALID_KEY
                     });
@@ -185,35 +185,35 @@ export default class BibtexEntryViewPlugin extends Plugin {
                     const entryPre = element.createEl('pre');
                     const entryCode = entryPre.createEl('code', { cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_BIBTEX_ENTRY });
                     
-                    entryCode.createEl('span', { text: parsedEntry.bibkey, cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_BIBKEY });
+                    entryCode.createSpan({ text: parsedEntry.bibkey, cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_BIBKEY });
                     
                     parsedEntry.fields.forEach((field) => {
                         entryCode.appendText('\n');
-                        entryCode.createEl('span', { text: field.fieldName, cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_FIELD_NAME });
-                        entryCode.createEl('span', { text: ': ', cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_FIELD_NAME });
+                        entryCode.createSpan({ text: field.fieldName, cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_FIELD_NAME });
+                        entryCode.createSpan({ text: ': ', cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_FIELD_NAME });
                         
                         // Special handling for author/editor fields to style the "and" separator.
                         const fieldNameLower = field.fieldName.toLowerCase();
                         if (fieldNameLower === 'author' || fieldNameLower === 'editor') {
                             const creators = field.fieldValue.split(' and ');
                             creators.forEach((creator, index) => {
-                                entryCode.createEl('span', { text: creator, cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_FIELD_VALUE });
+                                entryCode.createSpan({ text: creator, cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_FIELD_VALUE });
                                 if (index < creators.length - 1) {
-                                    entryCode.createEl('span', { text: ' and ', cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_FIELD_NAME });
+                                    entryCode.createSpan({ text: ' and ', cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_FIELD_NAME });
                                 }
                             });
                         } else {
                             // Default rendering for all other fields.
-                            entryCode.createEl('span',{ text: field.fieldValue, cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_FIELD_VALUE } )
+                            entryCode.createSpan({ text: field.fieldValue, cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_FIELD_VALUE })
                         }
                     });
                 } else {
                     // --- Render an error for an invalid/not-found key ---
                     const entryPre = element.createEl('pre');
                     const entryCode = entryPre.createEl('code', { cls: `${PLUGIN_CONSTANTS.CSS_CLASSES.CSS_BIBTEX_ENTRY} ${PLUGIN_CONSTANTS.CSS_CLASSES.CSS_BIBTEX_ERROR}` });
-                    entryCode.createEl('span', { text: bibkey, cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_INVALID_KEY });
+                    entryCode.createSpan({ text: bibkey, cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_INVALID_KEY });
                     entryCode.appendText(' ');
-                    entryCode.createEl('span', { text: PLUGIN_CONSTANTS.EMPTY_KEY_MSG, cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_INVALID_KEY });
+                    entryCode.createSpan({ text: PLUGIN_CONSTANTS.EMPTY_KEY_MSG, cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_INVALID_KEY });
                 }
             });
 
@@ -234,7 +234,7 @@ export default class BibtexEntryViewPlugin extends Plugin {
      * Loads the plugin settings from Obsidian's data store.
      */
     async loadSettings() {
-        this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+        this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<BibtexEntryViewSettings>);
     }
 
     /**
@@ -313,7 +313,7 @@ export default class BibtexEntryViewPlugin extends Plugin {
                         }
                     } else {
                         // Handle plain string values.
-                        fieldValue = value as string;
+                        fieldValue = value;
                     }
 
                     return {
@@ -458,7 +458,7 @@ class BibkeySuggester extends EditorSuggest<FormattedBibtexEntry> {
         const queryTokens = query
             .split(' ')
             .filter(w => w.length > 0)
-            .flatMap(part => part.match(/[a-z]+|\d+/g) || []);
+            .flatMap(part => part.match(/\p{L}+|\p{N}+/gu) || []);
 
         if (queryTokens.length === 0) return [];
 
@@ -499,9 +499,9 @@ class BibkeySuggester extends EditorSuggest<FormattedBibtexEntry> {
     renderSuggestion(suggestion: FormattedBibtexEntry, el: HTMLElement): void {
         el.addClass(PLUGIN_CONSTANTS.CSS_CLASSES.CSS_SUGGESTION_ITEM);
         
-        el.createEl('div', { text: suggestion.bibkey, cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_SUGGESTION_KEY });
+        el.createDiv({ text: suggestion.bibkey, cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_SUGGESTION_KEY });
 
-        const detailsContainer = el.createEl('div', { cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_SUGGESTION_DETAILS });
+        const detailsContainer = el.createDiv({ cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_SUGGESTION_DETAILS });
         
         const authorField = suggestion.fields.find(f => f.fieldName.toLowerCase() === 'author');
         const editorField = suggestion.fields.find(f => f.fieldName.toLowerCase() === 'editor');
@@ -518,12 +518,12 @@ class BibkeySuggester extends EditorSuggest<FormattedBibtexEntry> {
             authorYearText += `, ${yearField.fieldValue}`;
         }
         if (authorYearText) {
-            detailsContainer.createEl('div', { text: authorYearText.trim(), cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_SUGGESTION_AUTHOR_YEAR });
+            detailsContainer.createDiv({ text: authorYearText.trim(), cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_SUGGESTION_AUTHOR_YEAR });
         }
 
         // Line 2: Display the title with special formatting based on entry type.
         if (titleField) {
-            const titleEl = detailsContainer.createEl('div', { cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_SUGGESTION_TITLE });
+            const titleEl = detailsContainer.createDiv({ cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_SUGGESTION_TITLE });
             const entryType = suggestion.entryType.toLowerCase();
 
             if (entryType === 'article' || entryType === 'inbook') {
@@ -643,7 +643,7 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
                 .onClick(() => {
                     new BibFileSelectionModal(this.app, (selectedPath) => {
                         this.plugin.settings.bibFilePath = selectedPath;
-                        this.plugin.saveSettings();
+                        void this.plugin.saveSettings();
                         this.display(); // Re-render the settings tab to show the new path
                     }).open();
                 }))
@@ -651,13 +651,13 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
                 .setButtonText(PLUGIN_CONSTANTS.SETTINGS.IMPORT_TO_VAULT_TEXT)
                 .setTooltip(PLUGIN_CONSTANTS.SETTINGS.IMPORT_TO_VAULT_TOOLTIP)
                 .onClick(() => {
-                    const fileInput = document.createElement('input');
+                    const fileInput = createEl('input');
                     fileInput.type = 'file';
                     fileInput.accept = `.${PLUGIN_CONSTANTS.BIB_FILE_EXTENSION}`;
                     fileInput.onchange = async () => {
-                        if (!fileInput.files || fileInput.files.length === 0) return;
+                        const file = fileInput.files?.[0];
+                        if (!file) return;
                         
-                        const file = fileInput.files[0];
                         const content = await file.text();
                         const newPath = file.name;
 
@@ -670,10 +670,10 @@ class BibtexEntryViewSettingTab extends PluginSettingTab {
                             }
                             
                             this.plugin.settings.bibFilePath = newPath;
-                            this.plugin.saveSettings();
+                            await this.plugin.saveSettings();
                             this.display();
                         } catch (error) {
-                            new Notice(PLUGIN_CONSTANTS.IMPORT_ERROR_MSG(error.message));
+                            new Notice(PLUGIN_CONSTANTS.IMPORT_ERROR_MSG(error instanceof Error ? error.message : String(error)));
                         }
                     };
                     fileInput.click();
@@ -732,10 +732,9 @@ class BibFileSelectionModal extends Modal {
         // Create a search input to filter the file list.
         const searchInput = new TextComponent(contentEl)
             .setPlaceholder(PLUGIN_CONSTANTS.DEFAULT_SEARCH_PLACEHOLDER);
-        searchInput.inputEl.style.width = '100%';
-        searchInput.inputEl.style.marginBottom = '10px';
+        searchInput.inputEl.addClass(PLUGIN_CONSTANTS.CSS_CLASSES.CSS_FILE_SEARCH_INPUT);
         
-        const listEl = contentEl.createEl('div');
+        const listEl = contentEl.createDiv();
         
         // Function to update the displayed list based on the search filter.
         const updateList = (filter: string) => {
@@ -748,7 +747,7 @@ class BibFileSelectionModal extends Modal {
             }
 
             filtered.forEach(file => {
-                const item = listEl.createEl('div', { text: file.path, cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_FILE_ITEM });
+                const item = listEl.createDiv({ text: file.path, cls: PLUGIN_CONSTANTS.CSS_CLASSES.CSS_FILE_ITEM });
                 item.addEventListener('click', () => {
                     this.onChooseFile(file.path);
                     this.close();
